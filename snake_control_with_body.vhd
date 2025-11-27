@@ -150,7 +150,7 @@ begin
                 
                 -- Check self-collision (only check first few segments for speed)
                 hit := '0';
-                for i in 0 to 7 loop  -- Only check first 8 segments
+                for i in 0 to 15 loop  -- Only check first 8 segments
                     if i < snake_length then
                         seg_x := to_integer(unsigned(body_x(i)));
                         seg_y := to_integer(unsigned(body_y(i)));
