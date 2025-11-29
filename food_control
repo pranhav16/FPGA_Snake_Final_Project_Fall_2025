@@ -15,17 +15,20 @@ entity food_control is
         rst       : in  std_logic;
         game_tick : in  std_logic;
 
-        -- Snake heads for collision detection
+        -- Snake heads for collision detection (grid coords)
         p1_head_x : in  integer range 0 to GRID_WIDTH-1;
-        p1_head_y : in  integer range 0 to GRID_WIDTH-1;
+        p1_head_y : in  integer range 0 to GRID_HEIGHT-1;
         p2_head_x : in  integer range 0 to GRID_WIDTH-1;
-        p2_head_y : in  integer range 0 to GRID_WIDTH-1;
+        p2_head_y : in  integer range 0 to GRID_HEIGHT-1;
 
         -- Current apple position (grid coordinates)
         food_x    : out integer range 0 to GRID_WIDTH-1;
         food_y    : out integer range 0 to GRID_HEIGHT-1;
 
-        -- One-clock pulses (on clk) when apple is eaten (only when visible)
+        -- '1' = apple exists (visible & collidable), '0' = no apple
+        food_valid : out std_logic;
+
+        -- One-clock pulses when apple is eaten (only when exists)
         p1_ate    : out std_logic;
         p2_ate    : out std_logic
     );
@@ -33,28 +36,21 @@ end food_control;
 
 architecture arch of food_control is
 
-    --------------------------------------------------------------------
     -- 10-bit LFSR for pseudo-random positions
-    --------------------------------------------------------------------
     signal rand_lfsr : std_logic_vector(9 downto 0);
 
-    --------------------------------------------------------------------
-    -- Apple visibility state
-    --------------------------------------------------------------------
-    signal apple_active : std_logic := '1';  -- '1' = visible, '0' = hidden
+    -- Apple existence state
+    -- '1' = exists (visible), '0' = does not exist (3 s gap)
+    signal apple_exists : std_logic := '1';
 
     signal vis_count : integer range 0 to VISIBLE_TICKS := 0;
     signal hid_count : integer range 0 to HIDDEN_TICKS  := 0;
 
-    --------------------------------------------------------------------
     -- Registered apple position
-    --------------------------------------------------------------------
     signal food_x_r : integer range 0 to GRID_WIDTH-1 := 10;
     signal food_y_r : integer range 0 to GRID_HEIGHT-1 := 10;
 
-    --------------------------------------------------------------------
     -- Eat pulses (registered)
-    --------------------------------------------------------------------
     signal p1_ate_r : std_logic := '0';
     signal p2_ate_r : std_logic := '0';
 
@@ -72,8 +68,8 @@ begin
                 ----------------------------------------------------------------
                 -- Reset everything
                 ----------------------------------------------------------------
-                rand_lfsr     <= SEED;   -- use generic seed
-                apple_active  <= '1';    -- start with visible apple
+                rand_lfsr     <= SEED;
+                apple_exists  <= '1';    -- start with an existing apple
                 vis_count     <= 0;
                 hid_count     <= 0;
                 food_x_r      <= 10;
@@ -93,13 +89,13 @@ begin
                     rand_lfsr <= rand_lfsr(8 downto 0) &
                                  (rand_lfsr(9) xor rand_lfsr(6));
 
-                    if apple_active = '1' then
+                    if apple_exists = '1' then
                         --------------------------------------------------------
-                        -- VISIBLE PHASE
+                        -- EXISTING PHASE (up to VISIBLE_TICKS or until eaten)
                         --------------------------------------------------------
                         time_up := false;
 
-                        -- Visibility timing
+                        -- 8 s existence timer
                         if vis_count = VISIBLE_TICKS - 1 then
                             time_up   := true;
                             vis_count <= 0;
@@ -107,34 +103,34 @@ begin
                             vis_count <= vis_count + 1;
                         end if;
 
-                        -- Hit detection only when visible
+                        -- Hit detection only when apple exists
                         p1_hit := (p1_head_x = food_x_r) and (p1_head_y = food_y_r);
                         p2_hit := (p2_head_x = food_x_r) and (p2_head_y = food_y_r);
 
                         if p1_hit then
-                            p1_ate_r <= '1';
+                            p1_ate_r <= '1';   -- NOTE: <= for signal
                         end if;
 
                         if p2_hit then
-                            p2_ate_r <= '1';
+                            p2_ate_r <= '1';   -- NOTE: <= for signal
                         end if;
 
-                        -- If time up or eaten -> go to hidden phase NOW
+                        -- If time up or eaten -> apple stops existing for 3 s
                         if time_up or p1_hit or p2_hit then
-                            apple_active <= '0';
+                            apple_exists <= '0';
                             hid_count    <= 0;
                         end if;
 
                     else
                         --------------------------------------------------------
-                        -- HIDDEN PHASE
+                        -- NON-EXISTENT PHASE (no apple for HIDDEN_TICKS)
                         --------------------------------------------------------
                         if hid_count = HIDDEN_TICKS - 1 then
                             hid_count    <= 0;
-                            apple_active <= '1';   -- become visible again
+                            apple_exists <= '1';   -- new apple appears
 
                             ----------------------------------------------------
-                            -- Pick new random position
+                            -- Pick new random position for the new apple
                             ----------------------------------------------------
                             -- X from bits [5:0] -> 0..63, fold into 0..GRID_WIDTH-1
                             new_x := to_integer(unsigned(rand_lfsr(5 downto 0)));
@@ -159,7 +155,7 @@ begin
                             hid_count <= hid_count + 1;
                         end if;
 
-                    end if; -- apple_active
+                    end if; -- apple_exists
                 end if; -- game_tick
             end if; -- rst
         end if; -- rising_edge
@@ -168,9 +164,10 @@ begin
     --------------------------------------------------------------------
     -- Outputs
     --------------------------------------------------------------------
-    food_x <= food_x_r;
-    food_y <= food_y_r;
-    p1_ate <= p1_ate_r;
-    p2_ate <= p2_ate_r;
+    food_x     <= food_x_r;
+    food_y     <= food_y_r;
+    food_valid <= apple_exists;
+    p1_ate     <= p1_ate_r;
+    p2_ate     <= p2_ate_r;
 
 end arch;
