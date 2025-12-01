@@ -91,10 +91,13 @@ begin
     -- Main game logic
     ------------------------------------------------------------------
     process(clk)
-        variable nx, ny : integer range 0 to GRID_WIDTH-1;
+        variable nx : integer range 0 to GRID_WIDTH-1;
+        variable ny : integer range 0 to GRID_HEIGHT-1;
         variable new_idx : integer range 0 to MAX_LENGTH-1;
         variable hit : std_logic;
-        variable seg_x, seg_y : integer range 0 to GRID_WIDTH-1;
+        variable seg_x : integer range 0 to GRID_WIDTH-1;
+        variable seg_y : integer range 0 to GRID_HEIGHT-1;
+        variable hit_wall : std_logic;
     begin
         if rising_edge(clk) then
             if rst = '1' then
@@ -125,46 +128,49 @@ begin
                     when DIR_UP =>
                         if head_y > 0 then
                             ny := head_y - 1;
-                        else
-                            ny := GRID_HEIGHT - 1;
                         end if;
                     when DIR_DOWN =>
                         if head_y < GRID_HEIGHT-1 then
                             ny := head_y + 1;
-                        else
-                            ny := 0;
                         end if;
                     when DIR_LEFT =>
                         if head_x > 0 then
                             nx := head_x - 1;
-                        else
-                            nx := GRID_WIDTH - 1;
                         end if;
                     when DIR_RIGHT =>
                         if head_x < GRID_WIDTH-1 then
                             nx := head_x + 1;
-                        else
-                            nx := 0;
                         end if;
                 end case;
                 
                 -- Check self-collision (only check first few segments for speed)
+                hit_wall := '0';
+                if (nx = 0) or (ny = 0) or
+                   (nx = GRID_WIDTH-1) or (ny = GRID_HEIGHT-1) then
+                    hit_wall := '1';
+                elsif (nx = 10 and ny > 4  and ny < GRID_HEIGHT-5 and ny /= 12) or
+                      (nx = 20 and ny > 2  and ny < GRID_HEIGHT-7 and ny /= 18) or
+                      (nx = 30 and ny > 6  and ny < GRID_HEIGHT-3 and ny /=  9) then
+                    hit_wall := '1';
+                end if;
+
                 hit := '0';
-                for i in 0 to 15 loop  -- Only check first 8 segments
-                    if i < snake_length then
-                        seg_x := to_integer(unsigned(body_x(i)));
-                        seg_y := to_integer(unsigned(body_y(i)));
-                        if seg_x = nx and seg_y = ny then
-                            hit := '1';
-                        end if;
+                for i in 0 to MAX_LENGTH-1 loop
+                    exit when i >= snake_length;  
+                    seg_x := to_integer(unsigned(body_x(i)));
+                    seg_y := to_integer(unsigned(body_y(i)));
+                    if seg_x = nx and seg_y = ny then
+                        hit := '1';
                     end if;
                 end loop;
-                
+
+                if hit_wall = '1' then
+                    hit := '1';
+                end if;
+
                 collision <= hit;
                 
-                -- Move if no collision
                 if hit = '0' then
-                    -- Calculate new index
                     if head_idx < MAX_LENGTH-1 then
                         new_idx := head_idx + 1;
                     else
@@ -174,29 +180,29 @@ begin
                     body_x(new_idx) <= std_logic_vector(to_unsigned(nx, 12));
                     body_y(new_idx) <= std_logic_vector(to_unsigned(ny, 12));
                     
-                    head_x <= nx;
-                    head_y <= ny;
+                    head_x   <= nx;
+                    head_y   <= ny;
                     head_idx <= new_idx;
                     
-                    -- Growth logic
                     if grow = '1' or grow_pending = '1' then
                         if snake_length < MAX_LENGTH then
                             snake_length <= snake_length + 1;
                         end if;
                         grow_pending <= '0';
                     end if;
-                end if;
-            end if;
-        end if;
+                end if;  -- if hit = '0'
+            end if;  -- game_tick
+        end if;  -- rising_edge
     end process;
-    
-    ------------------------------------------------------------------
+                    
+  ------------------------------------------------------------------
     -- Query handler (simplified - only checks a subset)
     ------------------------------------------------------------------
     process(clk)
         variable found : std_logic;
         variable idx : integer range 0 to MAX_LENGTH-1;
-        variable check_x, check_y : integer range 0 to GRID_WIDTH-1;
+        variable check_x : integer range 0 to GRID_WIDTH-1;
+        variable check_y : integer range 0 to GRID_HEIGHT-1;
     begin
         if rising_edge(clk) then
             found := '0';
