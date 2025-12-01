@@ -20,12 +20,10 @@ begin
     begin
         is_wall <= '0';
 
-        -- 外框
         if (x = 0) or (y = 0) or
            (x = GRID_WIDTH-1) or (y = GRID_HEIGHT-1) then
             is_wall <= '1';
 
-        -- 内部几条竖墙（和我们之前 UART 版本类似）
         elsif (x = 10 and y > 4  and y < GRID_HEIGHT-5 and y /= 12) or
               (x = 20 and y > 2  and y < GRID_HEIGHT-7 and y /= 18) or
               (x = 30 and y > 6  and y < GRID_HEIGHT-3 and y /=  9) then
