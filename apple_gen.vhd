@@ -2,65 +2,106 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-entity apple_gen is
-  generic(
-    GRID_W        : integer := 40;
-    GRID_H        : integer := 30
-  );
-  port(
-    clk       : in  std_logic;
-    rstn      : in  std_logic;
-    tick_cell : in  std_logic;  
-    consume   : in  std_logic;  
-    pos_x     : out unsigned(5 downto 0);
-    pos_y     : out unsigned(5 downto 0)
-  );
+entity food_control is
+    generic (
+        GRID_WIDTH    : integer := 40;
+        GRID_HEIGHT   : integer := 30;
+        VISIBLE_TICKS : integer := 80;   -- 暂时基本不用
+        HIDDEN_TICKS  : integer := 30;
+        SEED          : std_logic_vector(9 downto 0) := "1010101010"
+    );
+    port (
+        clk       : in  std_logic;
+        rst       : in  std_logic;
+        game_tick : in  std_logic;
+        p1_head_x : in  integer range 0 to GRID_WIDTH-1;
+        p1_head_y : in  integer range 0 to GRID_WIDTH-1; -- 你 component 里写的是 GRID_WIDTH-1，有点小问题，这里改成 HEIGHT-1 更合理
+        p2_head_x : in  integer range 0 to GRID_WIDTH-1;
+        p2_head_y : in  integer range 0 to GRID_HEIGHT-1;
+
+        food_x    : out integer range 0 to GRID_WIDTH-1;
+        food_y    : out integer range 0 to GRID_HEIGHT-1;
+        p1_ate    : out std_logic;
+        p2_ate    : out std_logic
+    );
 end entity;
 
-architecture rtl of apple_gen is
-  component lfsr32
-    port(clk:in std_logic; rstn:in std_logic; random:out std_logic_vector(31 downto 0));
-  end component;
+architecture rtl of food_control is
 
-  signal rnd   : std_logic_vector(31 downto 0);
-  signal ax, ay: unsigned(5 downto 0) := to_unsigned(5,6);
+    -- LFSR 10-bit
+    signal lfsr : std_logic_vector(9 downto 0) := SEED;
 
-  function is_wall_pos(xi, yi : integer) return boolean is
-  begin
-    if (xi = 0) or (yi = 0) or
-       (xi = GRID_W-1) or (yi = GRID_H-1) then
-      return true;
-    end if;
+    signal food_x_i : integer range 0 to GRID_WIDTH-1 := 5;
+    signal food_y_i : integer range 0 to GRID_HEIGHT-1 := 5;
 
-    if (xi=10 and yi>4 and yi<GRID_H-5 and yi/=12) or
-       (xi=20 and yi>2 and yi<GRID_H-7 and yi/=18) or
-       (xi=30 and yi>6 and yi<GRID_H-3 and yi/=9) then
-      return true;
-    end if;
-    return false;
-  end function;
+    type state_t is (VISIBLE, HIDDEN);
+    signal st : state_t := VISIBLE;
+
+    signal hide_cnt : integer range 0 to HIDDEN_TICKS := 0;
+
 begin
-  u_lfsr: lfsr32 port map(clk=>clk, rstn=>rstn, random=>rnd);
 
-  process(clk, rstn)
-    variable rx, ry : integer;
-  begin
-    if rstn='0' then
-      ax <= to_unsigned(5,6);
-      ay <= to_unsigned(5,6);
-    elsif rising_edge(clk) then
-      if (consume='1') or (tick_cell='1') then
-        rx := to_integer(unsigned(rnd(7 downto 0))) mod GRID_W;
-        ry := to_integer(unsigned(rnd(15 downto 8))) mod GRID_H;
+    food_x <= food_x_i;
+    food_y <= food_y_i;
 
-        if not is_wall_pos(rx, ry) then
-          ax <= to_unsigned(rx, 6);
-          ay <= to_unsigned(ry, 6);
+    process(clk, rst)
+        variable new_x  : integer;
+        variable new_y  : integer;
+        variable nxt_lfsr : std_logic_vector(9 downto 0);
+        variable p1_hit, p2_hit : boolean;
+    begin
+        if rst = '1' then
+            lfsr    <= SEED;
+            food_x_i <= 5;
+            food_y_i <= 5;
+            st      <= VISIBLE;
+            hide_cnt <= 0;
+            p1_ate <= '0';
+            p2_ate <= '0';
+        elsif rising_edge(clk) then
+            p1_ate <= '0';
+            p2_ate <= '0';
+
+            if game_tick = '1' then
+                -- LFSR 跑一步
+                -- taps: x^10 + x^7 + 1
+                nxt_lfsr := lfsr(8 downto 0) & (lfsr(9) xor lfsr(6));
+                lfsr     <= nxt_lfsr;
+
+                case st is
+                    when VISIBLE =>
+                        -- 检查有没有被吃
+                        p1_hit := (p1_head_x = food_x_i) and (p1_head_y = food_y_i);
+                        p2_hit := (p2_head_x = food_x_i) and (p2_head_y = food_y_i);
+
+                        if p1_hit or p2_hit then
+                            if p1_hit then p1_ate <= '1'; end if;
+                            if p2_hit then p2_ate <= '1'; end if;
+
+                            -- 生成新位置（先藏起来，等一会再出现）
+                            new_x := to_integer(unsigned(nxt_lfsr(5 downto 0))) mod GRID_WIDTH;
+                            new_y := to_integer(unsigned(nxt_lfsr(9 downto 6))) mod GRID_HEIGHT;
+
+                            food_x_i <= new_x;
+                            food_y_i <= new_y;
+
+                            st       <= HIDDEN;
+                            hide_cnt <= 0;
+                        else
+                            -- 这里可以用 VISIBLE_TICKS 做闪烁之类的扩展，暂时不处理
+                            null;
+                        end if;
+
+                    when HIDDEN =>
+                        if hide_cnt >= HIDDEN_TICKS then
+                            st       <= VISIBLE;
+                            hide_cnt <= 0;
+                        else
+                            hide_cnt <= hide_cnt + 1;
+                        end if;
+                end case;
+            end if;
         end if;
-      end if;
-    end if;
-  end process;
+    end process;
 
-  pos_x <= ax;
-  pos_y <= ay;
 end architecture;
