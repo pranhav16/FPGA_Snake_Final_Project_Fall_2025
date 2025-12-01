@@ -93,6 +93,18 @@ architecture arch of final_project is
             p2_ate    : out std_logic
         );
     end component;
+--wall
+    component wall_field is
+        generic (
+            GRID_WIDTH  : integer := 40;
+            GRID_HEIGHT : integer := 30
+        );
+        port(
+            x       : in  integer range 0 to GRID_WIDTH-1;
+            y       : in  integer range 0 to GRID_HEIGHT-1;
+            is_wall : out std_logic
+        );
+    end component;
 
     -- Clocks
     signal clkfb      : std_logic;
@@ -143,11 +155,12 @@ architecture arch of final_project is
     signal grid_x : integer range 0 to GRID_WIDTH-1;
     signal grid_y : integer range 0 to GRID_HEIGHT-1;
     
+    
     -- Rendering signals (registered for better timing)
     signal pixel_p1   : std_logic := '0';
     signal pixel_p2   : std_logic := '0';
     signal pixel_food : std_logic := '0';
-    
+    signal pixel_wall : std_logic := '0';
     -- Color output registers
     signal color_r : std_logic_vector(1 downto 0) := "00";
     signal color_g : std_logic_vector(1 downto 0) := "00";
@@ -299,7 +312,19 @@ begin
         p1_ate    => p1_ate,
         p2_ate    => p2_ate
     );
-    
+    ------------------------------------------------------------------
+    -- Wall instance
+    ------------------------------------------------------------------
+    wall_inst : wall_field
+    generic map (
+        GRID_WIDTH  => GRID_WIDTH,
+        GRID_HEIGHT => GRID_HEIGHT
+    )
+    port map (
+        x       => grid_x,
+        y       => grid_y,
+        is_wall => pixel_wall
+    );
     ------------------------------------------------------------------
     -- Grid calculation (pipelined)
     ------------------------------------------------------------------
@@ -369,6 +394,11 @@ begin
                 color_r <= "11";
                 color_g <= "00";
                 color_b <= "00";
+            elsif pixel_wall = '1' then
+                -- Gray (wall)
+                color_r <= "01";
+                color_g <= "01";
+                color_b <= "01";
             else
                 -- Black
                 color_r <= "00";
