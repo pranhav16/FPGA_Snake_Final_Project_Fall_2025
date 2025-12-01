@@ -6,7 +6,7 @@ entity food_control is
     generic (
         GRID_WIDTH    : integer := 40;
         GRID_HEIGHT   : integer := 30;
-        VISIBLE_TICKS : integer := 80;   -- 暂时基本不用
+        VISIBLE_TICKS : integer := 80;  
         HIDDEN_TICKS  : integer := 30;
         SEED          : std_logic_vector(9 downto 0) := "1010101010"
     );
@@ -15,7 +15,7 @@ entity food_control is
         rst       : in  std_logic;
         game_tick : in  std_logic;
         p1_head_x : in  integer range 0 to GRID_WIDTH-1;
-        p1_head_y : in  integer range 0 to GRID_WIDTH-1; -- 你 component 里写的是 GRID_WIDTH-1，有点小问题，这里改成 HEIGHT-1 更合理
+        p1_head_y : in  integer range 0 to GRID_WIDTH-1; 
         p2_head_x : in  integer range 0 to GRID_WIDTH-1;
         p2_head_y : in  integer range 0 to GRID_HEIGHT-1;
 
@@ -63,14 +63,12 @@ begin
             p2_ate <= '0';
 
             if game_tick = '1' then
-                -- LFSR 跑一步
-                -- taps: x^10 + x^7 + 1
+               
                 nxt_lfsr := lfsr(8 downto 0) & (lfsr(9) xor lfsr(6));
                 lfsr     <= nxt_lfsr;
 
                 case st is
                     when VISIBLE =>
-                        -- 检查有没有被吃
                         p1_hit := (p1_head_x = food_x_i) and (p1_head_y = food_y_i);
                         p2_hit := (p2_head_x = food_x_i) and (p2_head_y = food_y_i);
 
@@ -88,7 +86,6 @@ begin
                             st       <= HIDDEN;
                             hide_cnt <= 0;
                         else
-                            -- 这里可以用 VISIBLE_TICKS 做闪烁之类的扩展，暂时不处理
                             null;
                         end if;
 
