@@ -326,7 +326,7 @@ begin
   process(clk_25mhz)
 begin
     if rising_edge(clk_25mhz) then
-        game_tick_delayed <= game_tick;
+        game_tick_delayed <= game_tick_play;
     end if;
 end process;
 
@@ -393,7 +393,7 @@ end process;
     port map (
         clk       => clk_25mhz,
         rst       => rst,
-        game_tick => game_tick_play,
+        game_tick => game_tick_delayed,
         btn_up    => p2_btn_up,
         btn_down  => p2_btn_down,
         btn_left  => p2_btn_left,
@@ -453,7 +453,7 @@ end process;
     port map (
         clk       => clk_25mhz,
         rst       => rst,
-        game_tick => game_tick_play,
+        game_tick => game_tick_delayed,
         map_id    => map_id,
         p1_head_x => p1_head_x,
         p1_head_y => p1_head_y,
