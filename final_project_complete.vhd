@@ -230,10 +230,10 @@ architecture arch of final_project is
     signal color_b : std_logic_vector(1 downto 0) := "00";
 
     -- Register the snake head locations
-    signal p1_head_x_reg : integer range 0 to GRID_WIDTH-1;
-    signal p1_head_y_reg : integer range 0 to GRID_HEIGHT-1;
-    signal p2_head_x_reg : integer range 0 to GRID_WIDTH-1;
-    signal p2_head_y_reg : integer range 0 to GRID_HEIGHT-1;
+    signal p1_head_x_reg : integer range 0 to GRID_W-1;
+    signal p1_head_y_reg : integer range 0 to GRID_H-1;
+    signal p2_head_x_reg : integer range 0 to GRID_W-1;
+    signal p2_head_y_reg : integer range 0 to GRID_H-1;
     ------------------------------------------------------------------
     -- Game state & map ID
     ------------------------------------------------------------------
