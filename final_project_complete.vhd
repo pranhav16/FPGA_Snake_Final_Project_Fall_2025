@@ -154,6 +154,7 @@ architecture arch of final_project is
     ------------------------------------------------------------------
     signal clkfb      : std_logic;
     signal clk_25mhz  : std_logic;
+    signal clk_6mhz : std_logic;
     
     -- VGA signals
     signal hcount : unsigned(9 downto 0);
@@ -252,8 +253,10 @@ begin
         BANDWIDTH        => "OPTIMIZED",
         CLKFBOUT_MULT_F  => 50.875,
         CLKIN1_PERIOD    => 83.333,
+        DIVCLK_DIVIDE    => 1,
+        
         CLKOUT0_DIVIDE_F => 24.250,
-        DIVCLK_DIVIDE    => 1
+        CLKOUT1_DIVIDE => 102
     ) 
     port map (
         CLKOUT0  => clk_25mhz,
@@ -263,7 +266,7 @@ begin
         RST      => '0',
         CLKFBIN  => clkfb,
         CLKOUT0B => open,
-        CLKOUT1  => open,
+        CLKOUT1  => clk_6mhz,
         CLKOUT1B => open,
         CLKOUT2  => open,
         CLKOUT2B => open,
