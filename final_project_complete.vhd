@@ -302,9 +302,9 @@ begin
     ------------------------------------------------------------------
     -- Game tick generator 
     ------------------------------------------------------------------
-    process(clk_6mhz) -- was 25mhz
+    process(clk_25mhz) -- was 25mhz
     begin
-        if rising_edge(clk_6mhz) then  -- was 25mhz
+        if rising_edge(clk_25mhz) then  -- was 25mhz
             if rst = '1' then
                 game_tick_counter <= (others => '0');
                 game_tick <= '0';
