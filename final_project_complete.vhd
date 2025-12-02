@@ -53,7 +53,7 @@ architecture arch of final_project is
         generic (
             GRID_WIDTH  : integer := 40;
             GRID_HEIGHT : integer := 30;
-            MAX_LENGTH  : integer := 16;
+            MAX_LENGTH  : integer := 5;
             START_X     : integer := 10;
             START_Y     : integer := 15
         );
@@ -170,7 +170,7 @@ architecture arch of final_project is
     
     -- Game timing
     signal game_tick_counter : unsigned(23 downto 0) := (others => '0');
-    constant GAME_TICK_MAX   : unsigned(23 downto 0) := to_unsigned(2500000, 24); -- ≈0.1s
+    constant GAME_TICK_MAX   : unsigned(23 downto 0) := to_unsigned(5000000, 24); -- ≈0.1s 
     signal game_tick         : std_logic := '0';
     signal game_tick_play    : std_logic := '0'; 
     
