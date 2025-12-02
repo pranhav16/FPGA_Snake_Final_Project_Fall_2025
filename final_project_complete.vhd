@@ -134,23 +134,9 @@ architecture arch of final_project is
     component wall_field is
         generic (
             GRID_WIDTH    : integer := 40;
-            GRID_HEIGHT   : integer := 30;
-            MAX_LENGTH    : integer := 16;
-            UPDATE_TICKS  : integer := 50;
-            NUM_WALLS     : integer := 20
+            GRID_HEIGHT   : integer := 30
         );
         port(
-            clk       : in  std_logic;
-            rst       : in  std_logic;
-            game_tick : in  std_logic;
-
-            p1_body_x_flat : in std_logic_vector(MAX_LENGTH*12-1 downto 0);
-            p1_body_y_flat : in std_logic_vector(MAX_LENGTH*12-1 downto 0);
-            p1_length      : in integer range 0 to MAX_LENGTH;
-
-            p2_body_x_flat : in std_logic_vector(MAX_LENGTH*12-1 downto 0);
-            p2_body_y_flat : in std_logic_vector(MAX_LENGTH*12-1 downto 0);
-            p2_length      : in integer range 0 to MAX_LENGTH;
 
             x       : in  integer range 0 to GRID_WIDTH-1;
             y       : in  integer range 0 to GRID_HEIGHT-1;
@@ -436,24 +422,9 @@ begin
     wall_inst : wall_field
     generic map (
         GRID_WIDTH   => GRID_WIDTH,
-        GRID_HEIGHT  => GRID_HEIGHT,
-        MAX_LENGTH   => MAX_LENGTH,
-        UPDATE_TICKS => 50,   
-        NUM_WALLS    => 20    
+        GRID_HEIGHT  => GRID_HEIGHT 
     )
     port map (
-        clk       => clk_25mhz,
-        rst       => rst,
-        game_tick => game_tick_play,
-
-        p1_body_x_flat => p1_body_x_flat,
-        p1_body_y_flat => p1_body_y_flat,
-        p1_length      => p1_length,
-
-        p2_body_x_flat => p2_body_x_flat,
-        p2_body_y_flat => p2_body_y_flat,
-        p2_length      => p2_length,
-
         x       => grid_x,
         y       => grid_y,
         is_wall => pixel_wall
