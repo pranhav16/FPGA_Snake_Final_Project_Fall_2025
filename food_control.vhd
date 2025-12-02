@@ -8,7 +8,8 @@ entity food_control is
         GRID_HEIGHT   : integer := 30;
         VISIBLE_TICKS : integer := 80;
         HIDDEN_TICKS  : integer := 30;
-        SEED          : std_logic_vector(9 downto 0) := "1010101010"
+        SEED          : std_logic_vector(9 downto 0) := "1010101010";
+        MAX_APPLES    : integer := 20     
     );
     port (
         clk       : in  std_logic;
@@ -37,22 +38,7 @@ architecture rtl of food_control is
 
     signal hide_cnt : integer range 0 to HIDDEN_TICKS := 0;
 
-    -- 用和 snake_control / wall_field 相同的墙规则
-    function is_wall_cell(
-        x : integer;
-        y : integer
-    ) return boolean is
-        constant MID_X : integer := GRID_WIDTH/2;
-    begin
-        if (x = 0) or (y = 0) or
-           (x = GRID_WIDTH-1) or (y = GRID_HEIGHT-1) then
-            return true;
-        elsif (x = MID_X and y >= 5 and y <= GRID_HEIGHT-6) then
-            return true;
-        else
-            return false;
-        end if;
-    end function;
+    signal apple_count : integer range 0 to MAX_APPLES := 0;
 
 begin
 
@@ -67,26 +53,26 @@ begin
         variable nxt_lfsr  : std_logic_vector(9 downto 0);
         variable p1_hit    : boolean;
         variable p2_hit    : boolean;
-        variable j         : integer;
     begin
         if rst = '1' then
-            lfsr      <= SEED;
-            food_x_i  <= 5;
-            food_y_i  <= 5;
-            st        <= VISIBLE;
-            hide_cnt  <= 0;
-            p1_ate    <= '0';
-            p2_ate    <= '0';
+            lfsr        <= SEED;
+            food_x_i    <= 5;
+            food_y_i    <= 5;
+            st          <= VISIBLE;
+            hide_cnt    <= 0;
+            p1_ate      <= '0';
+            p2_ate      <= '0';
+            apple_count <= 0;
         elsif rising_edge(clk) then
             p1_ate <= '0';
             p2_ate <= '0';
 
             if game_tick = '1' then
-                -- LFSR
                 nxt_lfsr := lfsr(8 downto 0) & (lfsr(9) xor lfsr(6));
                 lfsr     <= nxt_lfsr;
 
                 case st is
+  
                     when VISIBLE =>
                         p1_hit := (p1_head_x = food_x_i) and (p1_head_y = food_y_i);
                         p2_hit := (p2_head_x = food_x_i) and (p2_head_y = food_y_i);
@@ -95,32 +81,42 @@ begin
                             if p1_hit then p1_ate <= '1'; end if;
                             if p2_hit then p2_ate <= '1'; end if;
 
-                            -- 生成新苹果位置：内部区域、避开墙
-                            x_raw := to_integer(unsigned(nxt_lfsr(5 downto 0)));
-                            y_raw := to_integer(unsigned(nxt_lfsr(9 downto 6)));
+                            if apple_count < MAX_APPLES then
+                                apple_count <= apple_count + 1;
+                            end if;
 
-                            new_x := 1 + (x_raw mod (GRID_WIDTH-2));
-                            new_y := 1 + (y_raw mod (GRID_HEIGHT-2));
+                            if apple_count < MAX_APPLES then
+                                x_raw := to_integer(unsigned(nxt_lfsr(5 downto 0)));
+                                y_raw := to_integer(unsigned(nxt_lfsr(9 downto 6)));
 
-                            for j in 0 to 7 loop
-                                exit when not is_wall_cell(new_x, new_y);
-                                new_x := 1 + ((new_x - 1 + 1) mod (GRID_WIDTH-2));
-                                new_y := 1 + ((new_y - 1 + 1) mod (GRID_HEIGHT-2));
-                            end loop;
+                                
+                                new_x := 1 + (x_raw mod (GRID_WIDTH-2));
+                                new_y := 1 + (y_raw mod (GRID_HEIGHT-2));
 
-                            food_x_i <= new_x;
-                            food_y_i <= new_y;
+                                food_x_i <= new_x;
+                                food_y_i <= new_y;
 
-                            st       <= HIDDEN;
-                            hide_cnt <= 0;
+                                st       <= HIDDEN;  
+                                hide_cnt <= 0;
+                            else
+                                st       <= HIDDEN;  
+                                hide_cnt <= 0;
+                            end if;
                         end if;
 
+             
                     when HIDDEN =>
-                        if hide_cnt >= HIDDEN_TICKS then
-                            st       <= VISIBLE;
-                            hide_cnt <= 0;
+                        if apple_count >= MAX_APPLES then
+                           
+                            st       <= HIDDEN;
+                            hide_cnt <= hide_cnt;  
                         else
-                            hide_cnt <= hide_cnt + 1;
+                            if hide_cnt >= HIDDEN_TICKS then
+                                st       <= VISIBLE;
+                                hide_cnt <= 0;
+                            else
+                                hide_cnt <= hide_cnt + 1;
+                            end if;
                         end if;
                 end case;
             end if;
