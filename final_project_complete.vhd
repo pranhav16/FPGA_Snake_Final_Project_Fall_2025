@@ -173,7 +173,8 @@ architecture arch of final_project is
     constant GAME_TICK_MAX   : unsigned(23 downto 0) := to_unsigned(5000000, 24); -- ≈0.1s 
     signal game_tick         : std_logic := '0';
     signal game_tick_play    : std_logic := '0'; 
-    
+    signal game_tick_delayed : std_logic := '0';
+
     ------------------------------------------------------------------
     -- Player 1 signals
     ------------------------------------------------------------------
@@ -322,7 +323,13 @@ begin
 
     game_tick_play <= game_tick when game_state = PLAYING else '0';
 
-  
+  process(clk_25mhz)
+begin
+    if rising_edge(clk_25mhz) then
+        game_tick_delayed <= game_tick;
+    end if;
+end process;
+
     process(clk_25mhz)
         variable idx : integer range 0 to 7;
     begin
@@ -356,7 +363,7 @@ begin
     port map (
         clk       => clk_25mhz,
         rst       => rst,
-        game_tick => game_tick_play,
+        game_tick => game_tick_delayed,
         btn_up    => p1_btn_up,
         btn_down  => p1_btn_down,
         btn_left  => p1_btn_left,
@@ -420,7 +427,7 @@ begin
     port map (
         clk       => clk_25mhz,
         rst       => rst,
-        game_tick => game_tick_play,
+        game_tick => game_tick_delayed,
         map_id    => map_id,
         p1_head_x => p1_head_x,
         p1_head_y => p1_head_y,
