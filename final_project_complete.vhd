@@ -133,10 +133,25 @@ architecture arch of final_project is
 
     component wall_field is
         generic (
-            GRID_WIDTH  : integer := 40;
-            GRID_HEIGHT : integer := 30
+            GRID_WIDTH    : integer := 40;
+            GRID_HEIGHT   : integer := 30;
+            MAX_LENGTH    : integer := 16;
+            UPDATE_TICKS  : integer := 50;
+            NUM_WALLS     : integer := 20
         );
         port(
+            clk       : in  std_logic;
+            rst       : in  std_logic;
+            game_tick : in  std_logic;
+
+            p1_body_x_flat : in std_logic_vector(MAX_LENGTH*12-1 downto 0);
+            p1_body_y_flat : in std_logic_vector(MAX_LENGTH*12-1 downto 0);
+            p1_length      : in integer range 0 to MAX_LENGTH;
+
+            p2_body_x_flat : in std_logic_vector(MAX_LENGTH*12-1 downto 0);
+            p2_body_y_flat : in std_logic_vector(MAX_LENGTH*12-1 downto 0);
+            p2_length      : in integer range 0 to MAX_LENGTH;
+
             x       : in  integer range 0 to GRID_WIDTH-1;
             y       : in  integer range 0 to GRID_HEIGHT-1;
             is_wall : out std_logic
@@ -156,8 +171,8 @@ architecture arch of final_project is
     signal frame  : std_logic;
     
     -- Grid constants
-    constant GRID_WIDTH_C  : integer := 40;
-    constant GRID_HEIGHT_C : integer := 30;
+    constant GRID_WIDTH  : integer := 40;
+    constant GRID_HEIGHT : integer := 30;
     constant CELL_SIZE   : integer := 16;
     constant MAX_LENGTH  : integer := 16;
     
@@ -165,15 +180,15 @@ architecture arch of final_project is
     signal game_tick_counter : unsigned(23 downto 0) := (others => '0');
     constant GAME_TICK_MAX   : unsigned(23 downto 0) := to_unsigned(2500000, 24);
     signal game_tick         : std_logic := '0';
-    signal game_tick_play    : std_logic := '0';  
+    signal game_tick_play    : std_logic := '0';  -- 只在 PLAYING 时给蛇/苹果/墙
     
     ------------------------------------------------------------------
     -- Player 1 signals
     ------------------------------------------------------------------
-    signal p1_head_x  : integer range 0 to GRID_WIDTH_C-1;
-    signal p1_head_y  : integer range 0 to GRID_HEIGHT_C-1;
-    signal p1_query_x : integer range 0 to GRID_WIDTH_C-1;
-    signal p1_query_y : integer range 0 to GRID_HEIGHT_C-1;
+    signal p1_head_x  : integer range 0 to GRID_WIDTH-1;
+    signal p1_head_y  : integer range 0 to GRID_HEIGHT-1;
+    signal p1_query_x : integer range 0 to GRID_WIDTH-1;
+    signal p1_query_y : integer range 0 to GRID_HEIGHT-1;
     signal p1_is_body : std_logic;
     signal p1_length  : integer range 0 to MAX_LENGTH;
     signal p1_collision   : std_logic;
@@ -183,10 +198,10 @@ architecture arch of final_project is
     ------------------------------------------------------------------
     -- Player 2 signals
     ------------------------------------------------------------------
-    signal p2_head_x  : integer range 0 to GRID_WIDTH_C-1;
-    signal p2_head_y  : integer range 0 to GRID_HEIGHT_C-1;
-    signal p2_query_x : integer range 0 to GRID_WIDTH_C-1;
-    signal p2_query_y : integer range 0 to GRID_HEIGHT_C-1;
+    signal p2_head_x  : integer range 0 to GRID_WIDTH-1;
+    signal p2_head_y  : integer range 0 to GRID_HEIGHT-1;
+    signal p2_query_x : integer range 0 to GRID_WIDTH-1;
+    signal p2_query_y : integer range 0 to GRID_HEIGHT-1;
     signal p2_is_body : std_logic;
     signal p2_length  : integer range 0 to MAX_LENGTH;
     signal p2_collision   : std_logic;
@@ -196,21 +211,21 @@ architecture arch of final_project is
     ------------------------------------------------------------------
     -- Food / poison signals
     ------------------------------------------------------------------
-    signal food_x : integer range 0 to GRID_WIDTH_C-1;
-    signal food_y : integer range 0 to GRID_HEIGHT_C-1;
+    signal food_x : integer range 0 to GRID_WIDTH-1;
+    signal food_y : integer range 0 to GRID_HEIGHT-1;
     signal p1_ate : std_logic;
     signal p2_ate : std_logic;
 
-    signal poison_x  : integer range 0 to GRID_WIDTH_C-1;
-    signal poison_y  : integer range 0 to GRID_HEIGHT_C-1;
+    signal poison_x  : integer range 0 to GRID_WIDTH-1;
+    signal poison_y  : integer range 0 to GRID_HEIGHT-1;
     signal p1_poison : std_logic;
     signal p2_poison : std_logic;
     
     ------------------------------------------------------------------
     -- Grid & rendering
     ------------------------------------------------------------------
-    signal grid_x : integer range 0 to GRID_WIDTH_C-1;
-    signal grid_y : integer range 0 to GRID_HEIGHT_C-1;
+    signal grid_x : integer range 0 to GRID_WIDTH-1;
+    signal grid_y : integer range 0 to GRID_HEIGHT-1;
     
     signal pixel_p1     : std_logic := '0';
     signal pixel_p2     : std_logic := '0';
@@ -282,7 +297,7 @@ begin
     );
     
     ------------------------------------------------------------------
-    -- Game tick generator
+    -- Game tick generator 
     ------------------------------------------------------------------
     process(clk_25mhz)
     begin
@@ -309,11 +324,11 @@ begin
     ------------------------------------------------------------------
     snake_p1 : snake_control
     generic map (
-        GRID_WIDTH  => GRID_WIDTH_C,
-        GRID_HEIGHT => GRID_HEIGHT_C,
+        GRID_WIDTH  => GRID_WIDTH,
+        GRID_HEIGHT => GRID_HEIGHT,
         MAX_LENGTH  => MAX_LENGTH,
-        START_X     => 8,                      
-        START_Y     => GRID_HEIGHT_C/2
+        START_X     => 8,                     
+        START_Y     => GRID_HEIGHT/2
     )
     port map (
         clk       => clk_25mhz,
@@ -338,11 +353,11 @@ begin
         
     snake_p2 : snake_control
     generic map (
-        GRID_WIDTH  => GRID_WIDTH_C,
-        GRID_HEIGHT => GRID_HEIGHT_C,
+        GRID_WIDTH  => GRID_WIDTH,
+        GRID_HEIGHT => GRID_HEIGHT,
         MAX_LENGTH  => MAX_LENGTH,
-        START_X     => GRID_WIDTH_C-9,       
-        START_Y     => GRID_HEIGHT_C/2
+        START_X     => GRID_WIDTH-9,         
+        START_Y     => GRID_HEIGHT/2
     )
     port map (
         clk       => clk_25mhz,
@@ -370,8 +385,8 @@ begin
     ------------------------------------------------------------------
     food_ctrl_i : food_control
     generic map (
-        GRID_WIDTH    => GRID_WIDTH_C,
-        GRID_HEIGHT   => GRID_HEIGHT_C,
+        GRID_WIDTH    => GRID_WIDTH,
+        GRID_HEIGHT   => GRID_HEIGHT,
         VISIBLE_TICKS => 80,
         HIDDEN_TICKS  => 30,
         SEED          => "1010101010"
@@ -395,8 +410,8 @@ begin
     ------------------------------------------------------------------
     poison_ctrl_i : poison_control
     generic map (
-        GRID_WIDTH    => GRID_WIDTH_C,
-        GRID_HEIGHT   => GRID_HEIGHT_C,
+        GRID_WIDTH    => GRID_WIDTH,
+        GRID_HEIGHT   => GRID_HEIGHT,
         VISIBLE_TICKS => 80,
         HIDDEN_TICKS  => 30,
         SEED          => "1100110011"
@@ -420,10 +435,25 @@ begin
     ------------------------------------------------------------------
     wall_inst : wall_field
     generic map (
-        GRID_WIDTH  => GRID_WIDTH_C,
-        GRID_HEIGHT => GRID_HEIGHT_C
+        GRID_WIDTH   => GRID_WIDTH,
+        GRID_HEIGHT  => GRID_HEIGHT,
+        MAX_LENGTH   => MAX_LENGTH,
+        UPDATE_TICKS => 50,   
+        NUM_WALLS    => 20    
     )
     port map (
+        clk       => clk_25mhz,
+        rst       => rst,
+        game_tick => game_tick_play,
+
+        p1_body_x_flat => p1_body_x_flat,
+        p1_body_y_flat => p1_body_y_flat,
+        p1_length      => p1_length,
+
+        p2_body_x_flat => p2_body_x_flat,
+        p2_body_y_flat => p2_body_y_flat,
+        p2_length      => p2_length,
+
         x       => grid_x,
         y       => grid_y,
         is_wall => pixel_wall
@@ -487,9 +517,8 @@ begin
     ------------------------------------------------------------------
     process(clk_25mhz)
         variable i           : integer;
-        variable idx         : integer;
-        variable seg_x       : integer range 0 to GRID_WIDTH_C-1;
-        variable seg_y       : integer range 0 to GRID_HEIGHT_C-1;
+        variable seg_x       : integer range 0 to GRID_WIDTH-1;
+        variable seg_y       : integer range 0 to GRID_HEIGHT-1;
         variable p1_dead_v   : std_logic;
         variable p2_dead_v   : std_logic;
         variable p1_hit_other: std_logic;
@@ -506,7 +535,7 @@ begin
                     p1_hit_other := '0';
                     p2_hit_other := '0';
 
-                   
+                    -- p1 头撞 p2 身体
                     for i in 0 to MAX_LENGTH-1 loop
                         exit when i >= p2_length;
                         base  := i*12;
@@ -582,8 +611,8 @@ begin
                     color_b <= "00";
                 end if;
             else
-                -- GAME OVER 
-                if grid_y < GRID_HEIGHT_C/2 then
+                -- GAME OVER 画面：上半红，下半看谁赢
+                if grid_y < GRID_HEIGHT/2 then
                     color_r <= "11";  -- red
                     color_g <= "00";
                     color_b <= "00";
