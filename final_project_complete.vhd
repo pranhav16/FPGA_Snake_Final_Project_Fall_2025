@@ -229,6 +229,11 @@ architecture arch of final_project is
     signal color_g : std_logic_vector(1 downto 0) := "00";
     signal color_b : std_logic_vector(1 downto 0) := "00";
 
+    -- Register the snake head locations
+    signal p1_head_x_reg : integer range 0 to GRID_WIDTH-1;
+    signal p1_head_y_reg : integer range 0 to GRID_HEIGHT-1;
+    signal p2_head_x_reg : integer range 0 to GRID_WIDTH-1;
+    signal p2_head_y_reg : integer range 0 to GRID_HEIGHT-1;
     ------------------------------------------------------------------
     -- Game state & map ID
     ------------------------------------------------------------------
@@ -417,10 +422,10 @@ begin
         rst       => rst,
         game_tick => game_tick_play,
         map_id    => map_id,
-        p1_head_x => p1_head_x,
-        p1_head_y => p1_head_y,
-        p2_head_x => p2_head_x,
-        p2_head_y => p2_head_y,
+        p1_head_x => p1_head_x_reg,
+        p1_head_y => p1_head_y_reg,
+        p2_head_x => p2_head_x_reg,
+        p2_head_y => p2_head_y_reg,
         food_x    => food_x,
         food_y    => food_y,
         p1_ate    => p1_ate,
@@ -521,6 +526,16 @@ begin
         end if;
     end process;
 
+    -- Register the snake heads
+    process(clk_25mhz)
+    begin
+        if rising_edge(clk_25mhz) then
+        p1_head_x_reg <= p1_head_x;
+        p1_head_y_reg <= p1_head_y;
+        p2_head_x_reg <= p2_head_x;
+        p2_head_y_reg <= p2_head_y;
+    end if;
+    end process;
     ------------------------------------------------------------------
     -- Game state & mutual collision
     ------------------------------------------------------------------
