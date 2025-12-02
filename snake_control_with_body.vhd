@@ -7,8 +7,8 @@ entity snake_control is
         GRID_WIDTH  : integer := 40;
         GRID_HEIGHT : integer := 30;
         MAX_LENGTH  : integer := 16;
-        START_X     : integer := 10;  -- 出生点 X
-        START_Y     : integer := 15   -- 出生点 Y
+        START_X     : integer := 10;  
+        START_Y     : integer := 15   
     );
     Port ( 
         clk       : in std_logic;
@@ -22,8 +22,11 @@ entity snake_control is
         btn_right : in std_logic;
         
         -- Length change
-        grow   : in std_logic;  -- 普通苹果
-        shrink : in std_logic;  -- 毒苹果
+        grow   : in std_logic;  
+        shrink : in std_logic;  
+
+        --  ID
+        map_id : in std_logic_vector(2 downto 0);
         
         -- Snake head position
         snake_head_x_o : out integer range 0 to GRID_WIDTH-1;
@@ -36,9 +39,9 @@ entity snake_control is
         
         -- Status outputs
         snake_length_o : out integer range 0 to MAX_LENGTH;
-        self_collision : out std_logic;   -- 撞墙 + 自撞
+        self_collision : out std_logic;  
 
-        -- Body flattened (给 top 做"撞另一条蛇身体"检测)
+        -- Body flattened 
         body_x_flat_o : out std_logic_vector(MAX_LENGTH*12-1 downto 0);
         body_y_flat_o : out std_logic_vector(MAX_LENGTH*12-1 downto 0)
     );
@@ -50,14 +53,13 @@ architecture arch of snake_control is
     signal snake_dir      : direction_type := DIR_RIGHT;
     signal snake_next_dir : direction_type := DIR_RIGHT;
     
-    -- 身体数组：用整数存坐标
     type body_x_array is array (0 to MAX_LENGTH-1) of integer range 0 to GRID_WIDTH-1;
     type body_y_array is array (0 to MAX_LENGTH-1) of integer range 0 to GRID_HEIGHT-1;
     signal body_x : body_x_array;
     signal body_y : body_y_array;
     
     signal snake_length : integer range 0 to MAX_LENGTH := 3;
-    signal head_idx     : integer range 0 to MAX_LENGTH-1 := 2;  -- 环形缓冲 head 位置
+    signal head_idx     : integer range 0 to MAX_LENGTH-1 := 2;  
     
     signal grow_pending   : std_logic := '0';
     signal shrink_pending : std_logic := '0';
@@ -71,19 +73,75 @@ architecture arch of snake_control is
     signal body_x_flat : std_logic_vector(MAX_LENGTH*12-1 downto 0);
     signal body_y_flat : std_logic_vector(MAX_LENGTH*12-1 downto 0);
 
-    -- 判断是否墙：和 wall_field 完全一致
-    function is_wall_cell(
-        x : integer;
-        y : integer
+    function internal_wall(
+        x       : integer;
+        y       : integer;
+        map_sel : integer
     ) return boolean is
         constant MID_X : integer := GRID_WIDTH/2;
+        constant MID_Y : integer := GRID_HEIGHT/2;
     begin
-        -- 外框
+        case map_sel is
+            when 0 =>
+                return false;
+
+            when 1 =>
+                if (x = MID_X and y >= 3 and y <= 11) or
+                   (x = MID_X and y >= GRID_HEIGHT-11 and y <= GRID_HEIGHT-4) then
+                    return true;
+                else
+                    return false;
+                end if;
+
+            when 2 =>
+                if ((y = 8) or (y = GRID_HEIGHT-9)) and
+                   (x >= 4 and x <= GRID_WIDTH-5) then
+                    return true;
+                else
+                    return false;
+                end if;
+
+            when 3 =>
+                if ((x = 5 or x = 6) and (y = 5 or y = 6)) or
+                   ((x = GRID_WIDTH-6 or x = GRID_WIDTH-5) and (y = 5 or y = 6)) or
+                   ((x = 5 or x = 6) and (y = GRID_HEIGHT-6 or y = GRID_HEIGHT-5)) or
+                   ((x = GRID_WIDTH-6 or x = GRID_WIDTH-5) and (y = GRID_HEIGHT-6 or y = GRID_HEIGHT-5)) then
+                    return true;
+                else
+                    return false;
+                end if;
+
+            when 4 =>
+                if (x = MID_X and y >= 10 and y <= 20) or
+                   (y = MID_Y and x >= 15 and x <= 25) then
+                    return true;
+                else
+                    return false;
+                end if;
+
+            when others =>
+                return false;
+        end case;
+    end function;
+
+    function is_wall_cell(
+        x      : integer;
+        y      : integer;
+        map_id_bits : std_logic_vector(2 downto 0)
+    ) return boolean is
+        variable map_sel_int : integer range 0 to 7;
+    begin
         if (x = 0) or (y = 0) or
            (x = GRID_WIDTH-1) or (y = GRID_HEIGHT-1) then
             return true;
-        -- 中间竖墙
-        elsif (x = MID_X and y >= 5 and y <= GRID_HEIGHT-6) then
+        end if;
+
+        map_sel_int := to_integer(unsigned(map_id_bits));
+        if map_sel_int >= 5 then
+            map_sel_int := map_sel_int - 5;
+        end if;
+
+        if internal_wall(x, y, map_sel_int) then
             return true;
         else
             return false;
@@ -93,7 +151,7 @@ architecture arch of snake_control is
 begin
 
     ------------------------------------------------------------------
-    -- Direction control（禁止直接 180° 掉头）
+    -- Direction control
     ------------------------------------------------------------------
     process(clk)
     begin
@@ -136,13 +194,11 @@ begin
                 shrink_pending <= '0';
                 collision     <= '0';
                 
-                -- 初始身体：3 段向右 [START_X-2, START_X-1, START_X]
                 body_x(0) <= START_X-2; body_y(0) <= START_Y;
                 body_x(1) <= START_X-1; body_y(1) <= START_Y;
                 body_x(2) <= START_X;   body_y(2) <= START_Y;
                 
             else
-                -- 锁存加长/减长事件
                 if grow = '1' then
                     grow_pending <= '1';
                 end if;
@@ -151,10 +207,8 @@ begin
                 end if;
                 
                 if game_tick = '1' then
-                    -- 方向更新
                     snake_dir <= snake_next_dir;
                     
-                    -- 新蛇头位置（不再环绕）
                     nx := head_x;
                     ny := head_y;
                     
@@ -177,18 +231,15 @@ begin
                             end if;
                     end case;
                     
-                    -- 撞墙
-                    if is_wall_cell(nx, ny) then
+                    if is_wall_cell(nx, ny, map_id) then
                         hit_wall := '1';
                     else
                         hit_wall := '0';
                     end if;
 
-                    -- 自撞：检查当前身体所有有效段
                     hit := '0';
                     for i in 0 to MAX_LENGTH-1 loop
                         exit when i >= snake_length;
-                        -- 从 head 往后数第 i 段
                         if head_idx >= i then
                             idx := head_idx - i;
                         else
@@ -207,9 +258,7 @@ begin
 
                     collision <= hit;
                     
-                    -- 只有没撞到才移动 + 变长/变短
                     if hit = '0' then
-                        -- 计算新的 head index（环形缓冲区）
                         if head_idx < MAX_LENGTH-1 then
                             new_idx := head_idx + 1;
                         else
@@ -223,7 +272,6 @@ begin
                         head_y   <= ny;
                         head_idx <= new_idx;
                         
-                        -- 变长/变短逻辑
                         if (grow_pending = '1') and (shrink_pending = '0') then
                             if snake_length < MAX_LENGTH then
                                 snake_length <= snake_length + 1;
@@ -235,7 +283,6 @@ begin
                             end if;
                             shrink_pending <= '0';
                         else
-                            -- 同时吃到普通 + 毒苹果，互相抵消
                             grow_pending   <= '0';
                             shrink_pending <= '0';
                         end if;
@@ -245,9 +292,7 @@ begin
         end if; -- rising_edge
     end process;
     
-    ------------------------------------------------------------------
-    -- Query handler：给 VGA 看"这个格是不是蛇身"
-    ------------------------------------------------------------------
+
     process(clk)
         variable found    : std_logic;
         variable idx      : integer range 0 to MAX_LENGTH-1;
@@ -275,9 +320,6 @@ begin
         end if;
     end process;
 
-    ------------------------------------------------------------------
-    -- 身体展平输出（给 top 做"另一条蛇的身体集合"）
-    ------------------------------------------------------------------
     process(body_x, body_y, snake_length, head_idx)
         variable xf, yf : std_logic_vector(MAX_LENGTH*12-1 downto 0);
         variable base   : integer;
