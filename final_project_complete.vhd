@@ -166,7 +166,7 @@ architecture arch of final_project is
     constant GRID_W  : integer := 40;
     constant GRID_H  : integer := 30;
     constant CELL_SIZE   : integer := 16;
-    constant MAX_LENGTH  : integer := 16;
+    constant MAX_LENGTH  : integer := 5;
     
     -- Game timing
     signal game_tick_counter : unsigned(23 downto 0) := (others => '0');
