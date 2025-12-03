@@ -6,23 +6,23 @@ use UNISIM.vcomponents.all;
 
 entity final_project is
     port(
-        clk:   in    std_logic;  
-        rst:   in    std_logic;  
-        tx:    out   std_logic;
-        
+        clk:   in    std_logic;   -- 12MHz 外部时钟
+        rst:   in    std_logic;   -- 同步复位，高有效
+        tx:    out   std_logic;   -- 未用，拉高
+
         -- VGA outputs
         red:   out   std_logic_vector(1 downto 0);
         green: out   std_logic_vector(1 downto 0);
         blue:  out   std_logic_vector(1 downto 0);
         hsync: out   std_logic;
         vsync: out   std_logic;
-        
-        -- Player 1 controls
+
+        -- Player 1 controls（按键低有效）
         p1_btn_up    : in std_logic;
         p1_btn_down  : in std_logic;
         p1_btn_left  : in std_logic;
         p1_btn_right : in std_logic;
-        
+
         -- Player 2 controls
         p2_btn_up    : in std_logic;
         p2_btn_down  : in std_logic;
@@ -32,7 +32,7 @@ entity final_project is
 end final_project;
 
 architecture arch of final_project is
-    
+
     ------------------------------------------------------------------
     -- Component declarations
     ------------------------------------------------------------------
@@ -48,7 +48,7 @@ architecture arch of final_project is
             vcount_o : out unsigned(9 downto 0)
         );
     end component;
-    
+
     component snake_control is
         generic (
             GRID_WIDTH  : integer := 40;
@@ -61,32 +61,39 @@ architecture arch of final_project is
             clk       : in std_logic;
             rst       : in std_logic;
             game_tick : in std_logic;
-            
+
+            -- Button inputs (active low)
             btn_up    : in std_logic;
             btn_down  : in std_logic;
             btn_left  : in std_logic;
             btn_right : in std_logic;
             
+            -- Length change
             grow   : in std_logic;
             shrink : in std_logic;
 
+            -- Map ID
             map_id : in std_logic_vector(2 downto 0);
-            
+
+            -- Snake head position
             snake_head_x_o : out integer range 0 to GRID_WIDTH-1;
             snake_head_y_o : out integer range 0 to GRID_HEIGHT-1;
             
+            -- Query interface (for VGA)
             query_x : in integer range 0 to GRID_WIDTH-1;
             query_y : in integer range 0 to GRID_HEIGHT-1;
             is_body : out std_logic;
             
+            -- Status outputs
             snake_length_o : out integer range 0 to MAX_LENGTH;
-            self_collision : out std_logic;
+            self_collision : out std_logic;  
 
+            -- Body flattened
             body_x_flat_o : out std_logic_vector(MAX_LENGTH*12-1 downto 0);
             body_y_flat_o : out std_logic_vector(MAX_LENGTH*12-1 downto 0)
         );
     end component;
-    
+
     component food_control is
         generic (
             GRID_WIDTH    : integer := 40;
@@ -154,26 +161,25 @@ architecture arch of final_project is
     ------------------------------------------------------------------
     signal clkfb      : std_logic;
     signal clk_25mhz  : std_logic;
-    signal clk_6mhz : std_logic;
-    
+    signal clk_6mhz   : std_logic;  -- 目前没用，可以保留
+
     -- VGA signals
     signal hcount : unsigned(9 downto 0);
     signal vcount : unsigned(9 downto 0);
     signal blank  : std_logic;
     signal frame  : std_logic;
-    
+
     -- Grid constants
     constant GRID_W  : integer := 40;
     constant GRID_H  : integer := 30;
-    constant CELL_SIZE   : integer := 16;
-    constant MAX_LENGTH  : integer := 5;
-    
+    constant CELL_SIZE  : integer := 16;
+    constant MAX_LEN    : integer := 5;   -- 对应 snake_control 的 MAX_LENGTH
+
     -- Game timing
     signal game_tick_counter : unsigned(23 downto 0) := (others => '0');
-    constant GAME_TICK_MAX   : unsigned(23 downto 0) := to_unsigned(5000000, 24); -- ≈0.1s 
+    constant GAME_TICK_MAX   : unsigned(23 downto 0) := to_unsigned(2500000, 24); -- ~0.1s @ 25MHz
     signal game_tick         : std_logic := '0';
-    signal game_tick_play    : std_logic := '0'; 
-    signal game_tick_delayed : std_logic := '0';
+    signal game_tick_play    : std_logic := '0';
 
     ------------------------------------------------------------------
     -- Player 1 signals
@@ -183,11 +189,11 @@ architecture arch of final_project is
     signal p1_query_x : integer range 0 to GRID_W-1;
     signal p1_query_y : integer range 0 to GRID_H-1;
     signal p1_is_body : std_logic;
-    signal p1_length  : integer range 0 to MAX_LENGTH;
+    signal p1_length  : integer range 0 to MAX_LEN;
     signal p1_collision   : std_logic;
-    signal p1_body_x_flat : std_logic_vector(MAX_LENGTH*12-1 downto 0);
-    signal p1_body_y_flat : std_logic_vector(MAX_LENGTH*12-1 downto 0);
-    
+    signal p1_body_x_flat : std_logic_vector(MAX_LEN*12-1 downto 0);
+    signal p1_body_y_flat : std_logic_vector(MAX_LEN*12-1 downto 0);
+
     ------------------------------------------------------------------
     -- Player 2 signals
     ------------------------------------------------------------------
@@ -196,11 +202,11 @@ architecture arch of final_project is
     signal p2_query_x : integer range 0 to GRID_W-1;
     signal p2_query_y : integer range 0 to GRID_H-1;
     signal p2_is_body : std_logic;
-    signal p2_length  : integer range 0 to MAX_LENGTH;
+    signal p2_length  : integer range 0 to MAX_LEN;
     signal p2_collision   : std_logic;
-    signal p2_body_x_flat : std_logic_vector(MAX_LENGTH*12-1 downto 0);
-    signal p2_body_y_flat : std_logic_vector(MAX_LENGTH*12-1 downto 0);
-    
+    signal p2_body_x_flat : std_logic_vector(MAX_LEN*12-1 downto 0);
+    signal p2_body_y_flat : std_logic_vector(MAX_LEN*12-1 downto 0);
+
     ------------------------------------------------------------------
     -- Food / poison signals
     ------------------------------------------------------------------
@@ -213,30 +219,25 @@ architecture arch of final_project is
     signal poison_y  : integer range 0 to GRID_H-1;
     signal p1_poison : std_logic;
     signal p2_poison : std_logic;
-    
+
     ------------------------------------------------------------------
     -- Grid & rendering
     ------------------------------------------------------------------
     signal grid_x : integer range 0 to GRID_W-1;
     signal grid_y : integer range 0 to GRID_H-1;
-    
+
     signal pixel_p1     : std_logic := '0';
     signal pixel_p2     : std_logic := '0';
     signal pixel_food   : std_logic := '0';
     signal pixel_poison : std_logic := '0';
     signal pixel_wall   : std_logic := '0';
-    
+
     signal color_r : std_logic_vector(1 downto 0) := "00";
     signal color_g : std_logic_vector(1 downto 0) := "00";
     signal color_b : std_logic_vector(1 downto 0) := "00";
 
-    -- Register the snake head locations
-    signal p1_head_x_reg : integer range 0 to GRID_W-1;
-    signal p1_head_y_reg : integer range 0 to GRID_H-1;
-    signal p2_head_x_reg : integer range 0 to GRID_W-1;
-    signal p2_head_y_reg : integer range 0 to GRID_H-1;
     ------------------------------------------------------------------
-    -- Game state & map ID
+    -- Game state & random map
     ------------------------------------------------------------------
     type game_state_t is (PLAYING, P1_WIN, P2_WIN, TIE);
     signal game_state : game_state_t := PLAYING;
@@ -246,13 +247,14 @@ architecture arch of final_project is
     signal map_locked : std_logic := '0';
 
 begin
+
     ------------------------------------------------------------------
     -- UART TX: idle high
     ------------------------------------------------------------------
     tx <= '1';
 
     ------------------------------------------------------------------
-    -- Clock generation: 12MHz -> 25MHz
+    -- Clock generation：12MHz -> 25MHz (再分一个 6MHz 备用)
     ------------------------------------------------------------------
     cmt: MMCME2_BASE 
     generic map (
@@ -260,9 +262,8 @@ begin
         CLKFBOUT_MULT_F  => 50.875,
         CLKIN1_PERIOD    => 83.333,
         DIVCLK_DIVIDE    => 1,
-        
         CLKOUT0_DIVIDE_F => 24.250,
-        CLKOUT1_DIVIDE => 102
+        CLKOUT1_DIVIDE   => 102
     ) 
     port map (
         CLKOUT0  => clk_25mhz,
@@ -299,23 +300,23 @@ begin
         hcount_o => hcount,
         vcount_o => vcount
     );
-    
+
     ------------------------------------------------------------------
-    -- Game tick generator 
+    -- Game tick generator：★ 与蛇/苹果/毒苹果同域 (25MHz)
     ------------------------------------------------------------------
-    process(clk_25mhz) -- was 25mhz
+    process(clk_25mhz)
     begin
-        if rising_edge(clk_25mhz) then  -- was 25mhz
+        if rising_edge(clk_25mhz) then
             if rst = '1' then
                 game_tick_counter <= (others => '0');
-                game_tick <= '0';
+                game_tick         <= '0';
             else
                 if game_tick_counter >= GAME_TICK_MAX then
                     game_tick_counter <= (others => '0');
-                    game_tick <= '1';
+                    game_tick         <= '1';
                 else
                     game_tick_counter <= game_tick_counter + 1;
-                    game_tick <= '0';
+                    game_tick         <= '0';
                 end if;
             end if;
         end if;
@@ -323,13 +324,9 @@ begin
 
     game_tick_play <= game_tick when game_state = PLAYING else '0';
 
-  process(clk_25mhz)
-begin
-    if rising_edge(clk_25mhz) then
-        game_tick_delayed <= game_tick_play;
-    end if;
-end process;
-
+    ------------------------------------------------------------------
+    -- Map LFSR：上电时随机锁定一张地图
+    ------------------------------------------------------------------
     process(clk_25mhz)
         variable idx : integer range 0 to 7;
     begin
@@ -348,7 +345,7 @@ end process;
             end if;
         end if;
     end process;
-    
+
     ------------------------------------------------------------------
     -- Snake instances
     ------------------------------------------------------------------
@@ -356,14 +353,14 @@ end process;
     generic map (
         GRID_WIDTH  => GRID_W,
         GRID_HEIGHT => GRID_H,
-        MAX_LENGTH  => MAX_LENGTH,
-        START_X     => 8,               
+        MAX_LENGTH  => MAX_LEN,
+        START_X     => 8,              -- 左边偏里一点
         START_Y     => GRID_H/2
     )
     port map (
         clk       => clk_25mhz,
         rst       => rst,
-        game_tick => game_tick_delayed,
+        game_tick => game_tick_play,
         btn_up    => p1_btn_up,
         btn_down  => p1_btn_down,
         btn_left  => p1_btn_left,
@@ -381,19 +378,19 @@ end process;
         body_x_flat_o  => p1_body_x_flat,
         body_y_flat_o  => p1_body_y_flat
     );
-        
+
     snake_p2 : snake_control
     generic map (
         GRID_WIDTH  => GRID_W,
         GRID_HEIGHT => GRID_H,
-        MAX_LENGTH  => MAX_LENGTH,
-        START_X     => GRID_W-9,       
+        MAX_LENGTH  => MAX_LEN,
+        START_X     => GRID_W-9,       -- 右边偏里一点
         START_Y     => GRID_H/2
     )
     port map (
         clk       => clk_25mhz,
         rst       => rst,
-        game_tick => game_tick_delayed,
+        game_tick => game_tick_play,
         btn_up    => p2_btn_up,
         btn_down  => p2_btn_down,
         btn_left  => p2_btn_left,
@@ -411,9 +408,9 @@ end process;
         body_x_flat_o  => p2_body_x_flat,
         body_y_flat_o  => p2_body_y_flat
     );
-    
+
     ------------------------------------------------------------------
-    -- Food controller
+    -- Food controller（红苹果：最多 20 个）
     ------------------------------------------------------------------
     food_ctrl_i : food_control
     generic map (
@@ -427,7 +424,7 @@ end process;
     port map (
         clk       => clk_25mhz,
         rst       => rst,
-        game_tick => game_tick_delayed,
+        game_tick => game_tick_play,
         map_id    => map_id,
         p1_head_x => p1_head_x,
         p1_head_y => p1_head_y,
@@ -440,7 +437,7 @@ end process;
     );
 
     ------------------------------------------------------------------
-    -- Poison controller
+    -- Poison controller（蓝毒苹果）
     ------------------------------------------------------------------
     poison_ctrl_i : poison_control
     generic map (
@@ -453,7 +450,7 @@ end process;
     port map (
         clk       => clk_25mhz,
         rst       => rst,
-        game_tick => game_tick_delayed,
+        game_tick => game_tick_play,
         map_id    => map_id,
         p1_head_x => p1_head_x,
         p1_head_y => p1_head_y,
@@ -466,7 +463,7 @@ end process;
     );
 
     ------------------------------------------------------------------
-    -- Wall instance
+    -- Wall instance（5 张地图 + 外边框）
     ------------------------------------------------------------------
     wall_inst : wall_field
     generic map (
@@ -479,9 +476,9 @@ end process;
         map_id  => map_id,
         is_wall => pixel_wall
     );
-    
+
     ------------------------------------------------------------------
-    -- Grid calculation
+    -- Grid calculation：像素 -> 格子坐标
     ------------------------------------------------------------------
     process(clk_25mhz)
         variable hcount_int : integer;
@@ -490,13 +487,13 @@ end process;
         if rising_edge(clk_25mhz) then
             hcount_int := to_integer(hcount);
             vcount_int := to_integer(vcount);
-            
+
             if hcount_int < 640 then
                 grid_x <= hcount_int / CELL_SIZE;
             else
                 grid_x <= 0;
             end if;
-            
+
             if vcount_int < 480 then
                 grid_y <= vcount_int / CELL_SIZE;
             else
@@ -504,21 +501,21 @@ end process;
             end if;
         end if;
     end process;
-    
+
     p1_query_x <= grid_x;
     p1_query_y <= grid_y;
     p2_query_x <= grid_x;
     p2_query_y <= grid_y;
-    
+
     ------------------------------------------------------------------
-    -- Object detection
+    -- Object detection：当前格子是不是蛇/苹果/毒苹果
     ------------------------------------------------------------------
     process(clk_25mhz)
     begin
         if rising_edge(clk_25mhz) then
             pixel_p1 <= p1_is_body;
             pixel_p2 <= p2_is_body;
-            
+
             if (grid_x = food_x and grid_y = food_y) then
                 pixel_food <= '1';
             else
@@ -533,21 +530,11 @@ end process;
         end if;
     end process;
 
-    -- Register the snake heads
-    process(clk_25mhz)
-    begin
-        if rising_edge(clk_25mhz) then
-        p1_head_x_reg <= p1_head_x;
-        p1_head_y_reg <= p1_head_y;
-        p2_head_x_reg <= p2_head_x;
-        p2_head_y_reg <= p2_head_y;
-    end if;
-    end process;
     ------------------------------------------------------------------
     -- Game state & mutual collision
     ------------------------------------------------------------------
     process(clk_25mhz)
-        variable i           : integer;
+        variable k           : integer;
         variable seg_x       : integer range 0 to GRID_W-1;
         variable seg_y       : integer range 0 to GRID_H-1;
         variable p1_dead_v   : std_logic;
@@ -566,9 +553,10 @@ end process;
                     p1_hit_other := '0';
                     p2_hit_other := '0';
 
-                    for i in 0 to MAX_LENGTH-1 loop
-                        exit when i >= p2_length;
-                        base  := i*12;
+                    -- P1 头撞 P2 身体
+                    for k in 0 to MAX_LEN-1 loop
+                        exit when k >= p2_length;
+                        base  := k*12;
                         seg_x := to_integer(unsigned(p2_body_x_flat(base+11 downto base)));
                         seg_y := to_integer(unsigned(p2_body_y_flat(base+11 downto base)));
                         if (seg_x = p1_head_x) and (seg_y = p1_head_y) then
@@ -576,9 +564,10 @@ end process;
                         end if;
                     end loop;
 
-                    for i in 0 to MAX_LENGTH-1 loop
-                        exit when i >= p1_length;
-                        base  := i*12;
+                    -- P2 头撞 P1 身体
+                    for k in 0 to MAX_LEN-1 loop
+                        exit when k >= p1_length;
+                        base  := k*12;
                         seg_x := to_integer(unsigned(p1_body_x_flat(base+11 downto base)));
                         seg_y := to_integer(unsigned(p1_body_y_flat(base+11 downto base)));
                         if (seg_x = p2_head_x) and (seg_y = p2_head_y) then
@@ -592,9 +581,14 @@ end process;
                     if p2_hit_other = '1' then
                         p2_dead_v := '1';
                     end if;
-                        
-                    if p1_length = 0 then p1_dead_v := '1'; end if;
-                    if p2_length = 0 then p2_dead_v := '1'; end if;
+
+                    -- ★ 蛇长度为 0 也算死亡（被毒苹果吃光）
+                    if p1_length = 0 then
+                        p1_dead_v := '1';
+                    end if;
+                    if p2_length = 0 then
+                        p2_dead_v := '1';
+                    end if;
 
                     if (p1_dead_v = '1') and (p2_dead_v = '0') then
                         game_state <= P2_WIN;
@@ -618,23 +612,23 @@ end process;
         if rising_edge(clk_25mhz) then
             if game_state = PLAYING then
                 if pixel_p1 = '1' then
-                    color_r <= "00";  -- Green
+                    color_r <= "00";  -- Green (P1)
                     color_g <= "11";
                     color_b <= "00";
                 elsif pixel_p2 = '1' then
-                    color_r <= "11";  -- Yellow
+                    color_r <= "11";  -- Yellow (P2)
                     color_g <= "11";
                     color_b <= "00";
                 elsif pixel_food = '1' then
-                    color_r <= "11";  -- Red
+                    color_r <= "11";  -- Red (苹果)
                     color_g <= "00";
                     color_b <= "00";
                 elsif pixel_poison = '1' then
-                    color_r <= "00";  -- Blue
+                    color_r <= "00";  -- Blue (毒苹果)
                     color_g <= "00";
                     color_b <= "11";
                 elsif pixel_wall = '1' then
-                    color_r <= "01";  -- Gray
+                    color_r <= "01";  -- Gray (墙)
                     color_g <= "01";
                     color_b <= "01";
                 else
@@ -643,23 +637,23 @@ end process;
                     color_b <= "00";
                 end if;
             else
-                -- GAME OVER 
+                -- GAME OVER 画面：上半屏红色，下半屏表示胜者颜色
                 if grid_y < GRID_H/2 then
-                    color_r <= "11";  -- red
+                    color_r <= "11";  -- red banner
                     color_g <= "00";
                     color_b <= "00";
                 else
                     case game_state is
                         when P1_WIN =>
-                            color_r <= "00";
+                            color_r <= "00";  -- P1 green
                             color_g <= "11";
                             color_b <= "00";
                         when P2_WIN =>
-                            color_r <= "11";
+                            color_r <= "11";  -- P2 yellow
                             color_g <= "11";
                             color_b <= "00";
                         when TIE =>
-                            color_r <= "11";
+                            color_r <= "11";  -- white
                             color_g <= "11";
                             color_b <= "11";
                         when others =>
