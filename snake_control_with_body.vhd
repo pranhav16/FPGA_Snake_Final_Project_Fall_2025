@@ -278,7 +278,7 @@ begin
                             end if;
                             grow_pending   <= '0';
                         elsif (shrink_pending = '1') and (grow_pending = '0') then
-                            if snake_length > 1 then
+                            if snake_length > 0 then
                                 snake_length <= snake_length - 1;
                             end if;
                             shrink_pending <= '0';
