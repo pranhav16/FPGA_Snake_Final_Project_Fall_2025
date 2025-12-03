@@ -34,3 +34,8 @@ set_property -dict { PACKAGE_PIN C15   IOSTANDARD LVCMOS33 } [get_ports { p2_btn
 set_property -dict { PACKAGE_PIN H1    IOSTANDARD LVCMOS33 } [get_ports { p2_btn_down  }]; #IO_L3P_T0_DQS_AD5P_35 Sch=pio[06]
 set_property -dict { PACKAGE_PIN A15   IOSTANDARD LVCMOS33 } [get_ports { p2_btn_left  }]; #IO_L6N_T0_VREF_16 Sch=pio[07]
 set_property -dict { PACKAGE_PIN B15   IOSTANDARD LVCMOS33 } [get_ports { p2_btn_right  }]; #IO_L11N_T1_SRCC_16 Sch=pio[08]
+
+## standalone 
+set_property BITSTREAM.GENERAL.COMPRESS TRUE [current_design]
+set_property BITSTREAM.CONFIG.CONFIGRATE 33 [current_design]
+set_property CONFIG_MODE SPIx4 [current_design]
