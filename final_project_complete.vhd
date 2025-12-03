@@ -590,6 +590,13 @@ begin
                         p2_dead_v := '1';
                     end if;
 
+                    if p1_length = MAX_LEN then
+                        p2_dead_v := '1';  -- P1 wins, so P2 "loses"
+                    end if;
+                    if p2_length = MAX_LEN then
+                        p1_dead_v := '1';  -- P2 wins, so P1 "loses"
+                    end if;
+
                     if (p1_dead_v = '1') and (p2_dead_v = '0') then
                         game_state <= P2_WIN;
                     elsif (p2_dead_v = '1') and (p1_dead_v = '0') then
