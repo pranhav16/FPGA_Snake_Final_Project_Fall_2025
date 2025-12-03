@@ -6,7 +6,7 @@ entity snake_control is
     generic (
         GRID_WIDTH  : integer := 40;
         GRID_HEIGHT : integer := 30;
-        MAX_LENGTH  : integer := 16;
+        MAX_LENGTH  : integer := 5;
         START_X     : integer := 10;  
         START_Y     : integer := 15   
     );
