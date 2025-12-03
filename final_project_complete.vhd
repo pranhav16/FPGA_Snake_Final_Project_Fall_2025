@@ -592,6 +592,9 @@ end process;
                     if p2_hit_other = '1' then
                         p2_dead_v := '1';
                     end if;
+                        
+                    if p1_length = 0 then p1_dead_v := '1'; end if;
+                    if p2_length = 0 then p2_dead_v := '1'; end if;
 
                     if (p1_dead_v = '1') and (p2_dead_v = '0') then
                         game_state <= P2_WIN;
