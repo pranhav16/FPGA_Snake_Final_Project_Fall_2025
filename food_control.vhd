@@ -136,8 +136,8 @@ begin
             p2_ate      <= '0';
             apple_count <= 0;
         elsif rising_edge(clk) then
-            p1_ate <= '0';
-            p2_ate <= '0';
+            -- p1_ate <= '0';
+            -- p2_ate <= '0';
 
             if game_tick = '1' then
                 nxt_lfsr := lfsr(8 downto 0) & (lfsr(9) xor lfsr(6));
@@ -174,9 +174,14 @@ begin
                                 st       <= HIDDEN;
                                 hide_cnt <= 0;
                             end if;
+                        else
+                            p1_ate <= '0';
+                            p2_ate <= '0';
                         end if;
 
                     when HIDDEN =>
+                        p1_ate <= '0';
+                        p2_ate <= '0';
                         if apple_count >= MAX_APPLES then
                             st       <= HIDDEN;
                             hide_cnt <= hide_cnt;
