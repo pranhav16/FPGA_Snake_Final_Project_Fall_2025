@@ -133,8 +133,8 @@ begin
             p1_poison   <= '0';
             p2_poison   <= '0';
         elsif rising_edge(clk) then
-            p1_poison <= '0';
-            p2_poison <= '0';
+           -- p1_poison <= '0';
+           -- p2_poison <= '0';
 
             if game_tick = '1' then
                 -- LFSR
@@ -163,9 +163,14 @@ begin
 
                             st       <= HIDDEN;
                             hide_cnt <= 0;
+                        else
+                            p1_poison <= '0';
+                            p2_poison <= '0';
                         end if;
 
                     when HIDDEN =>
+                        p1_poison <= '0';
+                        p2_poison <= '0';
                         if hide_cnt >= HIDDEN_TICKS then
                             st       <= VISIBLE;
                             hide_cnt <= 0;
