@@ -101,8 +101,7 @@ architecture arch of final_project is
             GRID_HEIGHT   : integer := 30;
             VISIBLE_TICKS : integer := 80;
             HIDDEN_TICKS  : integer := 30;
-            SEED          : std_logic_vector(9 downto 0) := "1010101010";
-            MAX_APPLES    : integer := 20
+            SEED          : std_logic_vector(9 downto 0) := "1010101010"
         );
         port (
             clk       : in  std_logic;
@@ -475,8 +474,7 @@ begin
         GRID_HEIGHT   => GRID_H,
         VISIBLE_TICKS => 80,
         HIDDEN_TICKS  => 30,
-        SEED          => "1010101010",
-        MAX_APPLES    => 20
+        SEED          => "1010101010"
     )
     port map (
         clk       => clk_25mhz,
@@ -813,6 +811,10 @@ begin
     ------------------------------------------------------------------
     -- Game state & mutual collision + 满长度获胜 + 5局 + 死亡次数>=10直接输
     ------------------------------------------------------------------
+       ------------------------------------------------------------------
+    -- Game state & mutual collision + 满长度获胜才进下一局
+    -- 5 局制 + 死亡次数>=10 直接输掉整场
+    ------------------------------------------------------------------
     process(clk_25mhz)
         variable k           : integer;
         variable seg_x       : integer range 0 to GRID_W-1;
@@ -825,31 +827,34 @@ begin
         variable p1_full_v   : std_logic;
         variable p2_full_v   : std_logic;
 
+        -- 这几个是下一拍要写回的统计量
         variable p1_deaths_next    : unsigned(3 downto 0);
         variable p2_deaths_next    : unsigned(3 downto 0);
         variable p1_round_next     : unsigned(2 downto 0);
         variable p2_round_next     : unsigned(2 downto 0);
         variable round_count_next  : unsigned(2 downto 0);
 
-        variable round_end    : boolean;
+        variable round_end    : boolean;               -- 只有"长度满"时才为 true
         variable round_win_id : integer range -1 to 2; -- -1:平局, 0:P1, 1:P2, 2:无
     begin
         if rising_edge(clk_25mhz) then
             if rst = '1' then
-                game_state   <= ROUND_SHOW;         -- 上电先显示 ROUND1
-                num_level    <= (others => '0');    -- Round1
-                round_timer  <= (others => '0');
-                p1_round_wins <= (others => '0');
-                p2_round_wins <= (others => '0');
-                p1_deaths     <= (others => '0');
-                p2_deaths     <= (others => '0');
-                round_count   <= (others => '0');
-                match_over    <= '0';
+                game_state     <= ROUND_SHOW;         -- 上电先显示 ROUND1
+                num_level      <= (others => '0');    -- Round1
+                round_timer    <= (others => '0');
+                p1_round_wins  <= (others => '0');
+                p2_round_wins  <= (others => '0');
+                p1_deaths      <= (others => '0');
+                p2_deaths      <= (others => '0');
+                round_count    <= (others => '0');
+                match_over     <= '0';
             else
-                -- 1) ROUND_SHOW：只显示关卡，延时后进入 PLAYING（比赛未结束时）
+                ------------------------------------------------------------------
+                -- 1) ROUND_SHOW：只显示关卡，计时结束进入 PLAYING（比赛未结束时）
+                ------------------------------------------------------------------
                 if game_state = ROUND_SHOW then
                     if match_over = '1' then
-                        -- 比赛已经结束，则保持后面 MATCH 画面，不再进入 PLAYING
+                        -- 比赛已经结束，不再进入 PLAYING，保持最终胜者画面
                         game_state <= game_state;
                     else
                         if frame = '1' then  -- 每帧加一
@@ -862,12 +867,27 @@ begin
                         end if;
                     end if;
 
-                -- 2) PLAYING：正常判断碰撞、长度、关卡
+                ------------------------------------------------------------------
+                -- 2) PLAYING：只在 game_tick 时更新碰撞和统计
+                ------------------------------------------------------------------
                 elsif (game_state = PLAYING) and (game_tick = '1') then
+                    -- 初始化局部变量
                     p1_dead_v    := p1_collision;
                     p2_dead_v    := p2_collision;
                     p1_hit_other := '0';
                     p2_hit_other := '0';
+
+                    p1_full_v := '0';
+                    p2_full_v := '0';
+
+                    p1_deaths_next   := p1_deaths;
+                    p2_deaths_next   := p2_deaths;
+                    p1_round_next    := p1_round_wins;
+                    p2_round_next    := p2_round_wins;
+                    round_count_next := round_count;
+
+                    round_end    := false;
+                    round_win_id := 2;  -- 默认"本局未结束"
 
                     -- P1 头撞 P2 身体
                     for k in 0 to MAX_LEN-1 loop
@@ -907,8 +927,6 @@ begin
                     end if;
 
                     -- 满长度标志
-                    p1_full_v := '0';
-                    p2_full_v := '0';
                     if p1_length = MAX_LEN then
                         p1_full_v := '1';
                     end if;
@@ -916,121 +934,121 @@ begin
                         p2_full_v := '1';
                     end if;
 
-                    -- 判断本局结果（round_end & round_win_id）
-                    round_end    := false;
-                    round_win_id := 2;  -- 暂无
-
-                    -- 先看"长满获胜"
-                    if (p1_full_v = '1') and (p2_full_v = '0') then
-                        round_end    := true;
-                        round_win_id := 0;     -- P1 赢
-                        game_state   <= P1_WIN;
-                    elsif (p2_full_v = '1') and (p1_full_v = '0') then
-                        round_end    := true;
-                        round_win_id := 1;     -- P2 赢
-                        game_state   <= P2_WIN;
-                    elsif (p1_full_v = '1') and (p2_full_v = '1') then
-                        round_end    := true;
-                        round_win_id := -1;    -- 平局
-                        game_state   <= TIE;
-
-                    -- 再看死亡
-                    elsif (p1_dead_v = '1') and (p2_dead_v = '0') then
-                        round_end    := true;
-                        round_win_id := 1;     -- P2 赢
-                        game_state   <= P2_WIN;
-                    elsif (p2_dead_v = '1') and (p1_dead_v = '0') then
-                        round_end    := true;
-                        round_win_id := 0;     -- P1 赢
-                        game_state   <= P1_WIN;
-                    elsif (p1_dead_v = '1') and (p2_dead_v = '1') then
-                        round_end    := true;
-                        round_win_id := -1;    -- 平局
-                        game_state   <= TIE;
-                    else
-                        game_state <= PLAYING;
+                    ------------------------------------------------------------------
+                    -- 2.1 先统计死亡次数（不管本局是不是"有效"）
+                    ------------------------------------------------------------------
+                    if p1_dead_v = '1' then
+                        p1_deaths_next := p1_deaths_next + 1;
+                    end if;
+                    if p2_dead_v = '1' then
+                        p2_deaths_next := p2_deaths_next + 1;
                     end if;
 
-                    -- 如果本局结束，更新统计 & 判断是否整场比赛结束
-                    if round_end = true then
-                        p1_deaths_next   := p1_deaths;
-                        p2_deaths_next   := p2_deaths;
-                        p1_round_next    := p1_round_wins;
-                        p2_round_next    := p2_round_wins;
-                        round_count_next := round_count + 1;
+                    ------------------------------------------------------------------
+                    -- 2.2 判断"有效一局"：只有长度满才算一局结束 -> Round++ / num_level++
+                    ------------------------------------------------------------------
+                    if (p1_full_v = '1') or (p2_full_v = '1') then
+                        round_end := true;
 
-                        -- 死亡次数：谁在这一局中死了就 +1
-                        if p1_dead_v = '1' then
-                            p1_deaths_next := p1_deaths_next + 1;
-                        end if;
-                        if p2_dead_v = '1' then
-                            p2_deaths_next := p2_deaths_next + 1;
+                        -- 只看长度来定这一局输赢
+                        if (p1_full_v = '1') and (p2_full_v = '0') then
+                            round_win_id := 0;  -- P1 赢
+                            game_state   <= P1_WIN;
+                        elsif (p2_full_v = '1') and (p1_full_v = '0') then
+                            round_win_id := 1;  -- P2 赢
+                            game_state   <= P2_WIN;
+                        else
+                            round_win_id := -1; -- 同时满长度，平局
+                            game_state   <= TIE;
                         end if;
 
-                        -- 胜场：谁赢这一局就 +1
+                        -- 赢一局才加胜场
                         if round_win_id = 0 then
                             p1_round_next := p1_round_next + 1;
                         elsif round_win_id = 1 then
                             p2_round_next := p2_round_next + 1;
                         end if;
 
-                        -- 默认认为比赛还没结束
-                        -- 然后检查：
-                        -- 1) 已经打完 5 局；或
-                        -- 2) p1_deaths_next >=10；或
-                        -- 3) p2_deaths_next >=10
-                        if (round_count_next >= to_unsigned(5, 3)) or
-                           (p1_deaths_next >= to_unsigned(10, 4)) or
-                           (p2_deaths_next >= to_unsigned(10, 4)) then
-                            match_over <= '1';
+                        -- 有效一局结束：局数+1，关卡+1
+                        round_count_next := round_count_next + 1;
+                        num_level        <= num_level + 1;
 
-                            -- 决定整场比赛最终 winner，用 game_state 显示：
-                            if (p1_deaths_next >= to_unsigned(10, 4)) and 
-                               (p2_deaths_next <  to_unsigned(10, 4)) then
-                                -- P1 死亡 >=10 次，P2 获胜
-                                game_state <= P2_WIN;
-                            elsif (p2_deaths_next >= to_unsigned(10, 4)) and 
-                                  (p1_deaths_next <  to_unsigned(10, 4)) then
-                                -- P2 死亡 >=10 次，P1 获胜
-                                game_state <= P1_WIN;
-                            else
-                                -- 死亡都没到 10 或同时到 10，按胜场比较
-                                if p1_round_next > p2_round_next then
-                                    game_state <= P1_WIN;
-                                elsif p2_round_next > p1_round_next then
-                                    game_state <= P2_WIN;
-                                else
-                                    game_state <= TIE;
-                                end if;
-                            end if;
+                    else
+                        ------------------------------------------------------------------
+                        -- 2.3 没有长度满：这一局还没打完
+                        --     如果有人死亡，只是"试图失败一次"，不计入 5 局，只加死亡次数
+                        ------------------------------------------------------------------
+                        if (p1_dead_v = '1') and (p2_dead_v = '0') then
+                            game_state <= P2_WIN;  -- 画面上显示 P2 赢这一小局
+                        elsif (p2_dead_v = '1') and (p1_dead_v = '0') then
+                            game_state <= P1_WIN;
+                        elsif (p1_dead_v = '1') and (p2_dead_v = '1') then
+                            game_state <= TIE;
                         else
-                            -- 比赛还没结束，可以继续下一局
-                            num_level <= num_level + 1;
+                            game_state <= PLAYING;
                         end if;
+                    end if;  -- 有效一局判断
 
-                        -- 写回统计寄存器
-                        p1_deaths     <= p1_deaths_next;
-                        p2_deaths     <= p2_deaths_next;
-                        p1_round_wins <= p1_round_next;
-                        p2_round_wins <= p2_round_next;
-                        round_count   <= round_count_next;
-                    end if; -- round_end
+                    ------------------------------------------------------------------
+                    -- 2.4 判断整场比赛是否结束：
+                    --     条件：
+                    --       1) 有效局数达到 5 局；或
+                    --       2) 任意一方死亡次数 >= 10
+                    ------------------------------------------------------------------
+                    if (round_count_next >= to_unsigned(5, 3)) or
+                       (p1_deaths_next >= to_unsigned(10, 4)) or
+                       (p2_deaths_next >= to_unsigned(10, 4)) then
 
-                -- 3) WIN / TIE：若比赛未结束，等待 next_level，进入下一局 ROUND_SHOW
+                        match_over <= '1';
+
+                        -- 优先按"死亡次数>=10"判负
+                        if (p1_deaths_next >= to_unsigned(10, 4)) and 
+                           (p2_deaths_next <  to_unsigned(10, 4)) then
+                            game_state <= P2_WIN;   -- P1 死太多，P2 赢整场
+                        elsif (p2_deaths_next >= to_unsigned(10, 4)) and 
+                              (p1_deaths_next <  to_unsigned(10, 4)) then
+                            game_state <= P1_WIN;   -- P2 死太多，P1 赢整场
+                        else
+                            -- 否则按 5 局中的胜场比较
+                            if p1_round_next > p2_round_next then
+                                game_state <= P1_WIN;
+                            elsif p2_round_next > p1_round_next then
+                                game_state <= P2_WIN;
+                            else
+                                game_state <= TIE;
+                            end if;
+                        end if;
+                    end if;
+
+                    ------------------------------------------------------------------
+                    -- 2.5 写回统计寄存器
+                    ------------------------------------------------------------------
+                    p1_deaths     <= p1_deaths_next;
+                    p2_deaths     <= p2_deaths_next;
+                    p1_round_wins <= p1_round_next;
+                    p2_round_wins <= p2_round_next;
+                    round_count   <= round_count_next;
+
+                ------------------------------------------------------------------
+                -- 3) WIN / TIE：如果比赛没结束，按键进入下一局 ROUND_SHOW；
+                --    比赛结束后则一直停在最终 Winner 的画面
+                ------------------------------------------------------------------
                 elsif (game_state = P1_WIN or game_state = P2_WIN or game_state = TIE) then
-                    if (match_over = '0') then
+                    if match_over = '0' then
+                        -- 比赛还没结束，可以切下一局（只有长度满的那种局会让 num_level++）
                         if next_level = '1' then
                             game_state  <= ROUND_SHOW;
                             round_timer <= (others => '0');
                         end if;
                     else
-                        -- match_over=1 时，停留在最终 winner 画面
+                        -- 比赛结束，保持最终状态
                         game_state <= game_state;
                     end if;
-                end if; -- state cases
+                end if;
             end if;
         end if;
     end process;
+
 
     ------------------------------------------------------------------
     -- Color generation：包括 ROUND 展示 + 游戏中 + 最终 GAME OVER
