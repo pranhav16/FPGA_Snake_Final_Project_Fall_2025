@@ -101,8 +101,7 @@ architecture arch of final_project is
             GRID_HEIGHT   : integer := 30;
             VISIBLE_TICKS : integer := 80;
             HIDDEN_TICKS  : integer := 30;
-            SEED          : std_logic_vector(9 downto 0) := "1010101010";
-            MAX_APPLES    : integer := 100
+            SEED          : std_logic_vector(9 downto 0) := "1010101010"
         );
         port (
             clk       : in  std_logic;
@@ -230,7 +229,7 @@ architecture arch of final_project is
     signal p1_poison : std_logic;
     signal p2_poison : std_logic;
 
-    -- 当前启用的毒苹果个数（1/4/8）
+    -- 当前启用的毒苹果个数（这里还是 1 / 4 / 8，可按需要再扩展）
     signal active_poison_count : integer range 1 to 8;
 
     ------------------------------------------------------------------
@@ -252,7 +251,7 @@ architecture arch of final_project is
     ------------------------------------------------------------------
     -- Game state & random map & round
     ------------------------------------------------------------------
-    type game_state_t is (ROUND_SHOW, PLAYING, P1_WIN, P2_WIN, TIE);
+    type game_state_t is (ROUND_SHOW, PLAYING, P1_WIN, P2_WIN, TIE, SERIES_DONE);
     signal game_state : game_state_t := ROUND_SHOW;
 
     signal map_id     : std_logic_vector(2 downto 0) := "000"; -- 0~4
@@ -264,12 +263,21 @@ architecture arch of final_project is
     signal num_level  : unsigned(5 downto 0) := (others => '0');  -- 0 -> Round1
     signal round_timer: unsigned(7 downto 0) := (others => '0');  -- 控制 ROUND 显示时间
 
+    -- 统计每个玩家赢了几局（最多 5）
+    signal p1_round_wins : unsigned(2 downto 0) := (others => '0');
+    signal p2_round_wins : unsigned(2 downto 0) := (others => '0');
+
+    -- 标记这一局是不是通过"长度满"结束的
+    signal level_cleared : std_logic := '0';
+
 begin
     ------------------------------------------------------------------
-    -- 同时按下两边的"上"键，开始下一关
+    -- 同时按下两边的"上"键，在 WIN/TIE 状态下作为"继续"按键
     ------------------------------------------------------------------
     button_press <= '1' when (p2_btn_up = '0' and p1_btn_up = '0') else '0';
-    next_level   <= '1' when ((button_press = '1') and ((game_state = P1_WIN) or (game_state = P2_WIN))) else '0';
+    next_level   <= '1' when (button_press = '1') and
+                            ((game_state = P1_WIN) or (game_state = P2_WIN) or (game_state = TIE))
+                    else '0';
 
     ------------------------------------------------------------------
     -- UART TX: idle high
@@ -371,7 +379,7 @@ begin
     end process;
 
     ------------------------------------------------------------------
-    -- 根据关卡决定启用多少毒苹果：1 / 4 / 8
+    -- 根据关卡决定启用多少毒苹果：1 / 4 / 8 （Round4/5 仍然 8 个）
     ------------------------------------------------------------------
     process(num_level)
         variable lvl : integer;
@@ -452,7 +460,7 @@ begin
     );
 
     ------------------------------------------------------------------
-    -- Food controller（红苹果：最多 20 个）
+    -- Food controller（红苹果：无限次生成）
     ------------------------------------------------------------------
     food_ctrl_i : food_control
     generic map (
@@ -460,8 +468,7 @@ begin
         GRID_HEIGHT   => GRID_H,
         VISIBLE_TICKS => 80,
         HIDDEN_TICKS  => 30,
-        SEED          => "1010101010",
-        MAX_APPLES    => 100
+        SEED          => "1010101010"
     )
     port map (
         clk       => clk_25mhz,
@@ -481,7 +488,6 @@ begin
     ------------------------------------------------------------------
     -- 多个 Poison controller（蓝毒苹果）
     ------------------------------------------------------------------
-    -- 实例 0
     poison_ctrl_0 : poison_control
     generic map (
         GRID_WIDTH    => GRID_W,
@@ -505,7 +511,6 @@ begin
         p2_poison => p2_poison_vec(0)
     );
 
-    -- 实例 1
     poison_ctrl_1 : poison_control
     generic map (
         GRID_WIDTH    => GRID_W,
@@ -529,7 +534,6 @@ begin
         p2_poison => p2_poison_vec(1)
     );
 
-    -- 实例 2
     poison_ctrl_2 : poison_control
     generic map (
         GRID_WIDTH    => GRID_W,
@@ -553,7 +557,6 @@ begin
         p2_poison => p2_poison_vec(2)
     );
 
-    -- 实例 3
     poison_ctrl_3 : poison_control
     generic map (
         GRID_WIDTH    => GRID_W,
@@ -577,7 +580,6 @@ begin
         p2_poison => p2_poison_vec(3)
     );
 
-    -- 实例 4
     poison_ctrl_4 : poison_control
     generic map (
         GRID_WIDTH    => GRID_W,
@@ -601,7 +603,6 @@ begin
         p2_poison => p2_poison_vec(4)
     );
 
-    -- 实例 5
     poison_ctrl_5 : poison_control
     generic map (
         GRID_WIDTH    => GRID_W,
@@ -625,7 +626,6 @@ begin
         p2_poison => p2_poison_vec(5)
     );
 
-    -- 实例 6
     poison_ctrl_6 : poison_control
     generic map (
         GRID_WIDTH    => GRID_W,
@@ -649,7 +649,6 @@ begin
         p2_poison => p2_poison_vec(6)
     );
 
-    -- 实例 7
     poison_ctrl_7 : poison_control
     generic map (
         GRID_WIDTH    => GRID_W,
@@ -772,7 +771,7 @@ begin
     end process;
 
     ------------------------------------------------------------------
-    -- Game state & mutual collision + 满长度获胜 + 关卡计数 + ROUND 展示
+    -- Game state & mutual collision + 满长度获胜 + 局数统计 + 5 局后整场结果
     ------------------------------------------------------------------
     process(clk_25mhz)
         variable k           : integer;
@@ -785,12 +784,16 @@ begin
         variable base        : integer;
         variable p1_full_v   : std_logic;
         variable p2_full_v   : std_logic;
+        variable new_state   : game_state_t;
     begin
         if rising_edge(clk_25mhz) then
             if rst = '1' then
-                game_state   <= ROUND_SHOW;         -- 上电先显示 ROUND1
-                num_level    <= (others => '0');    -- Round1
-                round_timer  <= (others => '0');
+                game_state     <= ROUND_SHOW;         -- 上电先显示 ROUND1
+                num_level      <= (others => '0');    -- Round1
+                round_timer    <= (others => '0');
+                p1_round_wins  <= (others => '0');
+                p2_round_wins  <= (others => '0');
+                level_cleared  <= '0';
             else
                 -- 1) ROUND_SHOW：只显示关卡，延时后进入 PLAYING
                 if game_state = ROUND_SHOW then
@@ -798,12 +801,13 @@ begin
                         if round_timer < to_unsigned(60, 8) then  -- ~60 帧 ≈ 1 秒
                             round_timer <= round_timer + 1;
                         else
-                            round_timer <= (others => '0');
-                            game_state  <= PLAYING;
+                            round_timer   <= (others => '0');
+                            level_cleared <= '0';          -- 新局开始前清 0
+                            game_state    <= PLAYING;
                         end if;
                     end if;
 
-                -- 2) PLAYING：正常判断碰撞、长度、关卡
+                -- 2) PLAYING：正常判断碰撞、长度
                 elsif (game_state = PLAYING) and (game_tick = '1') then
                     p1_dead_v    := p1_collision;
                     p2_dead_v    := p2_collision;
@@ -857,52 +861,89 @@ begin
                         p2_full_v := '1';
                     end if;
 
-                    -- 先看"长满获胜"，并且关卡 +1
-                    if (p1_full_v = '1') and (p2_full_v = '0') then
-                        game_state <= P1_WIN;
-                        num_level  <= num_level + 1;
-                    elsif (p2_full_v = '1') and (p1_full_v = '0') then
-                        game_state <= P2_WIN;
-                        num_level  <= num_level + 1;
-                    elsif (p1_full_v = '1') and (p2_full_v = '1') then
-                        game_state <= TIE;
-                        num_level  <= num_level + 1;
+                    new_state := PLAYING;
 
-                    -- 再看死亡
+                    -- 先看"长满获胜"
+                    if (p1_full_v = '1') and (p2_full_v = '0') then
+                        new_state := P1_WIN;
+                    elsif (p2_full_v = '1') and (p1_full_v = '0') then
+                        new_state := P2_WIN;
+                    elsif (p1_full_v = '1') and (p2_full_v = '1') then
+                        new_state := TIE;
+
+                    -- 再看死亡（注意：这里不算"过关"，只是这一局的失败）
                     elsif (p1_dead_v = '1') and (p2_dead_v = '0') then
-                        game_state <= P2_WIN;
+                        new_state := P2_WIN;
                     elsif (p2_dead_v = '1') and (p1_dead_v = '0') then
-                        game_state <= P1_WIN;
+                        new_state := P1_WIN;
                     elsif (p1_dead_v = '1') and (p2_dead_v = '1') then
-                        game_state <= TIE;
+                        new_state := TIE;
+                    end if;
+
+                    if new_state /= PLAYING then
+                        game_state <= new_state;
+
+                        -- 这一局是不是"长度满了"的那种结束
+                        if (p1_full_v = '1') or (p2_full_v = '1') then
+                            level_cleared <= '1';
+                            -- 只有"长度满了"的局才计入胜局数
+                            if new_state = P1_WIN then
+                                p1_round_wins <= p1_round_wins + 1;
+                            elsif new_state = P2_WIN then
+                                p2_round_wins <= p2_round_wins + 1;
+                            end if;
+                        else
+                            -- 撞死之类，不算过关
+                            level_cleared <= '0';
+                        end if;
                     else
                         game_state <= PLAYING;
                     end if;
 
-                -- 3) WIN / TIE：等待 next_level，进入下一局 ROUND_SHOW
-                elsif (game_state = P1_WIN or game_state = P2_WIN or game_state = TIE) then
+                -- 3) WIN / TIE：等待 next_level
+                elsif (game_state = P1_WIN) or (game_state = P2_WIN) or (game_state = TIE) then
                     if next_level = '1' then
-                        game_state  <= ROUND_SHOW;
-                        round_timer <= (others => '0');
+                        if level_cleared = '1' then
+                            -- 这一局是"长度满"结束，才算打完一局
+                            if to_integer(num_level) >= 4 then
+                                -- 已经是第 5 局又成功"过关"，进入整场结果界面
+                                game_state <= SERIES_DONE;
+                            else
+                                num_level   <= num_level + 1;
+                                game_state  <= ROUND_SHOW;
+                                round_timer <= (others => '0');
+                            end if;
+                        else
+                            -- 这一局是撞死等结束，不算下一局，只重新打当前这局
+                            game_state  <= ROUND_SHOW;
+                            round_timer <= (others => '0');
+                            -- level_cleared 保持 0
+                        end if;
                     end if;
+
+                -- 4) SERIES_DONE：停在最终结果，直到复位
+                elsif game_state = SERIES_DONE then
+                    null;
                 end if;
             end if;
         end if;
     end process;
 
     ------------------------------------------------------------------
-    -- Color generation：包括 ROUND 展示 + 游戏中 + GAME OVER
+    -- Color generation：包括 ROUND 展示 + 游戏中 + GAME OVER + 整场结果
     ------------------------------------------------------------------
     process(clk_25mhz)
         variable round_int : integer;
         variable lx        : integer;
+        variable p1_win_i  : integer;
+        variable p2_win_i  : integer;
     begin
         if rising_edge(clk_25mhz) then
             if game_state = ROUND_SHOW then
-                -- 计算当前 Round = num_level + 1，最多显示 3
+                -- 计算当前 Round = num_level + 1，最多显示到 5
                 round_int := to_integer(num_level) + 1;
-                if round_int > 3 then
-                    round_int := 3;
+                if round_int > 5 then
+                    round_int := 5;
                 end if;
 
                 -- 背景黑
@@ -910,7 +951,7 @@ begin
                 color_g <= "00";
                 color_b <= "00";
 
-                -- 在屏幕中间画竖条来表示 Round 数
+                -- 在屏幕中间画竖条来表示 Round 数（最多 5 条）
                 if (grid_y >= 8) and (grid_y <= GRID_H-8) then
                     -- 把 x 平移到中间附近
                     lx := grid_x - (GRID_W/2 - 6);
@@ -929,6 +970,18 @@ begin
 
                     -- 第 3 根
                     elsif (round_int >= 3) and (lx >= 10) and (lx <= 13) then
+                        color_r <= "00";
+                        color_g <= "11";
+                        color_b <= "11";
+
+                    -- 第 4 根
+                    elsif (round_int >= 4) and (lx >= 15) and (lx <= 18) then
+                        color_r <= "00";
+                        color_g <= "11";
+                        color_b <= "11";
+
+                    -- 第 5 根
+                    elsif (round_int >= 5) and (lx >= 20) and (lx <= 23) then
                         color_r <= "00";
                         color_g <= "11";
                         color_b <= "11";
@@ -958,13 +1011,35 @@ begin
                     color_g <= "01";
                     color_b <= "01";
                 else
-                    color_r <= "11";  -- Black
+                    color_r <= "11";  -- 背景（你之前就是写成白色，这里保持）
+                    color_g <= "11";
+                    color_b <= "11";
+                end if;
+
+            elsif game_state = SERIES_DONE then
+                -- 整场 5 局结束后的最终结果：整屏显示总胜场多的玩家颜色
+                p1_win_i := to_integer(p1_round_wins);
+                p2_win_i := to_integer(p2_round_wins);
+
+                if p1_win_i > p2_win_i then
+                    -- P1 赢得局数多：绿色
+                    color_r <= "00";
+                    color_g <= "11";
+                    color_b <= "00";
+                elsif p2_win_i > p1_win_i then
+                    -- P2 赢得局数多：黄色
+                    color_r <= "11";
+                    color_g <= "11";
+                    color_b <= "00";
+                else
+                    -- 平局：白色
+                    color_r <= "11";
                     color_g <= "11";
                     color_b <= "11";
                 end if;
 
             else
-                -- GAME OVER 画面：上半屏红，下半屏胜者颜色
+                -- 单局 GAME OVER 画面：上半屏红，下半屏胜者颜色
                 if grid_y < GRID_H/2 then
                     color_r <= "11";  -- red banner
                     color_g <= "00";
