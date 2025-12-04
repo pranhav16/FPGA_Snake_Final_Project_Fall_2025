@@ -53,7 +53,7 @@ architecture arch of final_project is
         generic (
             GRID_WIDTH  : integer := 40;
             GRID_HEIGHT : integer := 30;
-            MAX_LENGTH  : integer := 5;
+            MAX_LENGTH  : integer := 7;
             START_X     : integer := 10;
             START_Y     : integer := 15
         );
@@ -61,7 +61,7 @@ architecture arch of final_project is
             clk       : in std_logic;
             rst       : in std_logic;
             game_tick : in std_logic;
-
+            next_level: in std_logic;
             -- Button inputs (active low)
             btn_up    : in std_logic;
             btn_down  : in std_logic;
@@ -173,7 +173,7 @@ architecture arch of final_project is
     constant GRID_W  : integer := 40;
     constant GRID_H  : integer := 30;
     constant CELL_SIZE  : integer := 16;
-    constant MAX_LEN    : integer := 5;   -- 对应 snake_control 的 MAX_LENGTH
+    constant MAX_LEN    : integer := 7;   -- 对应 snake_control 的 MAX_LENGTH
 
     -- Game timing
     signal game_tick_counter : unsigned(23 downto 0) := (others => '0');
@@ -245,11 +245,14 @@ architecture arch of final_project is
     signal map_id     : std_logic_vector(2 downto 0) := "000"; -- 0~4
     signal lfsr_map   : std_logic_vector(7 downto 0) := x"5A";
     signal map_locked : std_logic := '0';
+    
+    signal button_press: std_logic := '0';
+    signal next_level: std_logic := '0';
+    signal num_level: unsigned(5 downto 0) := (others => '0');
 
 begin
-
-    ------------------------------------------------------------------
-    -- UART TX: idle high
+    button_press <= '1' when (p2_btn_up = '0' and p1_btn_up = '0') else '0';
+    next_level <= '1' when ((button_press = '1') and ((game_state = P1_WIN) or (game_state = P2_WIN))) else '0';    -- UART TX: idle high
     ------------------------------------------------------------------
     tx <= '1';
 
@@ -333,7 +336,7 @@ begin
         if rising_edge(clk_25mhz) then
             lfsr_map <= lfsr_map(6 downto 0) & (lfsr_map(7) xor lfsr_map(5));
 
-            if rst = '1' then
+            if rst = '1' or next_level = '1' then
                 map_locked <= '0';
             elsif (map_locked = '0' and game_tick = '1') then
                 idx := to_integer(unsigned(lfsr_map(2 downto 0)));
@@ -361,6 +364,7 @@ begin
         clk       => clk_25mhz,
         rst       => rst,
         game_tick => game_tick_play,
+        next_level => next_level,
         btn_up    => p1_btn_up,
         btn_down  => p1_btn_down,
         btn_left  => p1_btn_left,
@@ -391,6 +395,7 @@ begin
         clk       => clk_25mhz,
         rst       => rst,
         game_tick => game_tick_play,
+        next_level => next_level,
         btn_up    => p2_btn_up,
         btn_down  => p2_btn_down,
         btn_left  => p2_btn_left,
@@ -592,9 +597,11 @@ begin
 
                     if p1_length = MAX_LEN then
                         p2_dead_v := '1';  -- P1 wins, so P2 "loses"
+                        num_level <= num_level +1;
                     end if;
                     if p2_length = MAX_LEN then
                         p1_dead_v := '1';  -- P2 wins, so P1 "loses"
+                        num_level <= num_level +1;
                     end if;
 
                     if (p1_dead_v = '1') and (p2_dead_v = '0') then
@@ -604,6 +611,10 @@ begin
                     elsif (p1_dead_v = '1') and (p2_dead_v = '1') then
                         game_state <= TIE;
                     else
+                        game_state <= PLAYING;
+                    end if;
+                elsif (game_state = P1_WIN or game_state = P2_WIN or game_state = TIE) then
+                    if next_level = '1' then
                         game_state <= PLAYING;
                     end if;
                 end if;

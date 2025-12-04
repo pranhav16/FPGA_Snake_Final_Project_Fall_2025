@@ -6,7 +6,7 @@ entity snake_control is
     generic (
         GRID_WIDTH  : integer := 40;
         GRID_HEIGHT : integer := 30;
-        MAX_LENGTH  : integer := 5;
+        MAX_LENGTH  : integer := 7;
         START_X     : integer := 10;  
         START_Y     : integer := 15   
     );
@@ -14,7 +14,7 @@ entity snake_control is
         clk       : in std_logic;
         rst       : in std_logic;
         game_tick : in std_logic;
-        
+        next_level : in std_logic;
         -- Button inputs (active low)
         btn_up    : in std_logic;
         btn_down  : in std_logic;
@@ -156,7 +156,7 @@ begin
     process(clk)
     begin
         if rising_edge(clk) then
-            if rst = '1' then
+            if rst = '1' or next_level = '1' then
                 snake_next_dir <= DIR_RIGHT;
             elsif btn_up = '0' and snake_dir /= DIR_DOWN then
                 snake_next_dir <= DIR_UP;
@@ -184,7 +184,7 @@ begin
         variable idx      : integer range 0 to MAX_LENGTH-1;
     begin
         if rising_edge(clk) then
-            if rst = '1' then
+            if rst = '1' or next_level = '1' then
                 head_x        <= START_X;
                 head_y        <= START_Y;
                 snake_dir     <= DIR_RIGHT;
