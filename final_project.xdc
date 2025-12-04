@@ -8,7 +8,7 @@ create_clock -add -name sys_clk_pin -period 83.33 -waveform {0 41.66} [get_ports
 
 ## Buttons
 set_property -dict { PACKAGE_PIN A18   IOSTANDARD LVCMOS33 } [get_ports { rst }]; #IO_L19N_T3_VREF_16 Sch=btn[0]
-#set_property -dict { PACKAGE_PIN B18   IOSTANDARD LVCMOS33 } [get_ports { btn[1] }]; #IO_L19P_T3_16 Sch=btn[1]
+set_property -dict { PACKAGE_PIN B18   IOSTANDARD LVCMOS33 } [get_ports { start_btn }]; #IO_L19P_T3_16 Sch=btn[1]
 
 ### Pmod Header JA
 set_property -dict { PACKAGE_PIN G17   IOSTANDARD LVCMOS33 } [get_ports { red[0] }]; #IO_L5N_T0_D07_14 Sch=ja[1]
