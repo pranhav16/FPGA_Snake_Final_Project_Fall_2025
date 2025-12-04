@@ -551,6 +551,7 @@ begin
         if rising_edge(clk_25mhz) then
             if rst = '1' then
                 game_state <= PLAYING;
+                num_level <= (others => '0');
             else
                 if (game_state = PLAYING) and (game_tick = '1') then
                     p1_dead_v    := p1_collision;
